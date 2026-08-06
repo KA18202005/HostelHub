@@ -1,15 +1,22 @@
-HostelHub
+# HostelHub
 
-AI-powered Hostel Maintenance Management System
+An AI-powered hostel maintenance and complaint management system.
 
-Frontend
+## Tech Stack
+
+### Frontend
 - Next.js
+- TypeScript
+- Tailwind CSS
+- shadcn/ui
 
-Backend
+### Backend
 - FastAPI
+- SQLModel
+- Alembic
 
-Database
+### Database
 - PostgreSQL
 
-AI
-- Duplicate Complaint Detection
+### AI
+- Gemini Embeddings (Duplicate Complaint Detection)

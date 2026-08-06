@@ -1,0 +1,9 @@
+erDiagram
+    HOSTEL ||--o{ ROOM : contains
+    ROOM ||--o{ USER : assigned_to
+    USER ||--o{ COMPLAINT : reports
+    USER ||--o{ COMPLAINT : assigned_to
+    COMPLAINT ||--o{ COMPLAINT_SUPPORTER : has
+    USER ||--o{ COMPLAINT_SUPPORTER : joins
+    USER ||--o{ NOTIFICATION : receives
+    USER ||--o{ ANNOUNCEMENT : creates
