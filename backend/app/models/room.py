@@ -7,6 +7,7 @@ from sqlmodel import Field, Relationship, SQLModel
 if TYPE_CHECKING:
     from app.models.hostel import Hostel
     from app.models.user import User
+    from app.models.complaint import Complaint
 
 class Room(BaseModel, TimestampMixin, table=True):
     __tablename__ = "rooms"
@@ -22,3 +23,7 @@ class Room(BaseModel, TimestampMixin, table=True):
     hostel: "Hostel" = Relationship(back_populates="rooms")
 
     students: list["User"] = Relationship(back_populates="room")
+    
+    complaints: list["Complaint"] = Relationship(
+        back_populates="room"
+    )

@@ -8,6 +8,10 @@ from app.models.mixins import TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.room import Room
+    from app.models.complaint import Complaint
+    from app.models.complaint_supporter import ComplaintSupporter
+    from app.models.notification import Notification
+    from app.models.announcement import Announcement
 
 
 class User(BaseModel, TimestampMixin, table=True):
@@ -34,4 +38,29 @@ class User(BaseModel, TimestampMixin, table=True):
 
     room: "Room" = Relationship(
         back_populates="students"
+    )
+    
+    reported_complaints: list["Complaint"] = Relationship(
+        back_populates="reported_by",
+        sa_relationship_kwargs={
+            "foreign_keys": "[Complaint.reported_by_id]"
+        }
+    )
+
+    assigned_complaints: list["Complaint"] = Relationship(
+        back_populates="assigned_to",
+        sa_relationship_kwargs={
+            "foreign_keys": "[Complaint.assigned_to_id]"
+        }
+    )
+    supported_complaints: list["ComplaintSupporter"] = Relationship(
+        back_populates="student"
+    )
+    
+    notifications: list["Notification"] = Relationship(
+        back_populates="user"
+    )
+    
+    announcements: list["Announcement"] = Relationship(
+        back_populates="created_by"
     )
