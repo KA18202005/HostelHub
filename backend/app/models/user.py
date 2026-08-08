@@ -19,9 +19,15 @@ class User(BaseModel, TimestampMixin, table=True):
 
     name: str
 
-    email: str = Field(index=True, unique=True)
+    email: str = Field(
+        index=True,
+        unique=True
+    )
 
-    password_hash: str
+    google_sub: str = Field(
+        unique=True,
+        index=True
+    )
 
     role: UserRole
 
