@@ -185,3 +185,4 @@ async def get_current_user_info(
         "role": current_user.role.value,
         "is_active": current_user.is_active,
     }
+    

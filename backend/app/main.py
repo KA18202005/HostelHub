@@ -3,7 +3,9 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.api.v1.auth import router as auth_router
 from app.core.config import settings
-
+from app.api.v1.complaints import router as complaints_router
+from app.api.v1.rooms import router as rooms_router
+from app.api.v1.hostels import router as hostels_router
 
 app = FastAPI(title="HostelHub API")
 
@@ -15,6 +17,9 @@ app.add_middleware(
 
 
 app.include_router(auth_router)
+app.include_router(complaints_router)
+app.include_router(rooms_router)
+app.include_router(hostels_router)
 
 
 @app.get("/")
