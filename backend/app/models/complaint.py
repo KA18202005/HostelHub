@@ -33,6 +33,8 @@ class Complaint(BaseModel, TimestampMixin, table=True):
     priority: ComplaintPriority = ComplaintPriority.MEDIUM
 
     status: ComplaintStatus = ComplaintStatus.OPEN
+    
+    ai_reason: str | None = None
 
     room_id: UUID = Field(
         foreign_key="rooms.id"

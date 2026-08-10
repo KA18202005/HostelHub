@@ -7,6 +7,10 @@ from app.models.user import User
 from app.auth.roles import require_role
 from app.enums.roles import UserRole
 from app.enums.complaint_status import ComplaintStatus
+from app.services.ai.complaint_classifier import classify_complaint
+from app.enums.complaint_category import ComplaintCategory
+from app.enums.complaint_priority import ComplaintPriority
+from app.services.notification_service import create_notification
 from app.schemas.complaint import (
     ComplaintAssign,
     ComplaintCreate,
@@ -16,6 +20,22 @@ from app.schemas.complaint import (
 )
 from sqlmodel import Session, select
 from uuid import UUID
+
+VALID_STATUS_TRANSITIONS = {
+    ComplaintStatus.OPEN: {
+        ComplaintStatus.ASSIGNED,
+    },
+    ComplaintStatus.ASSIGNED: {
+        ComplaintStatus.IN_PROGRESS,
+    },
+    ComplaintStatus.IN_PROGRESS: {
+        ComplaintStatus.RESOLVED,
+    },
+    ComplaintStatus.RESOLVED: {
+        ComplaintStatus.CLOSED,
+    },
+    ComplaintStatus.CLOSED: set(),
+}
 
 
 router = APIRouter(
@@ -41,12 +61,42 @@ def create_complaint(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Room not found",
         )
+    classification = None
+
+    try:
+        classification = classify_complaint(
+            title=complaint_data.title,
+            description=complaint_data.description,
+        )
+    except Exception:
+        classification = None
+
+    if complaint_data.category is not None:
+        category = complaint_data.category
+    elif classification is not None:
+        category = classification.category
+    else:
+        category = ComplaintCategory.OTHER
+
+    if complaint_data.priority is not None:
+        priority = complaint_data.priority
+    elif classification is not None:
+        priority = classification.priority
+    else:
+        priority = ComplaintPriority.MEDIUM
+
+    ai_reason = (
+        classification.reason
+        if classification is not None
+        else None
+    )
 
     complaint = Complaint(
         title=complaint_data.title,
         description=complaint_data.description,
-        category=complaint_data.category,
-        priority=complaint_data.priority,
+        category=category,
+        priority=priority,
+        ai_reason=ai_reason,
         room_id=complaint_data.room_id,
         reported_by_id=current_user.id,
     )
@@ -54,6 +104,25 @@ def create_complaint(
     session.add(complaint)
     session.commit()
     session.refresh(complaint)
+    
+    staff_users = session.exec(
+        select(User).where(
+            User.role.in_(
+                [UserRole.STAFF, UserRole.ADMIN]
+            )
+        )
+    ).all()
+
+    for staff_user in staff_users:
+        create_notification(
+            session=session,
+            user_id=staff_user.id,
+            title="New Complaint",
+            message=(
+                f"A new complaint '{complaint.title}' "
+                f"has been submitted."
+            ),
+        )
 
     return complaint
 
@@ -143,6 +212,16 @@ def assign_complaint(
 
     complaint.assigned_to_id = staff_user.id
     complaint.status = ComplaintStatus.ASSIGNED
+    
+    create_notification(
+        session=session,
+        user_id=complaint.reported_by_id,
+        title="Complaint Assigned",
+        message=(
+            f"Your complaint '{complaint.title}' "
+            f"has been assigned to {staff_user.name}."
+        ),
+    )
 
     session.add(complaint)
     session.commit()
@@ -176,7 +255,44 @@ def update_complaint_status(
             detail="Complaint not found",
         )
 
-    complaint.status = status_data.status
+    current_status = complaint.status
+    new_status = status_data.status
+
+    if new_status == current_status:
+        return complaint
+    
+    if new_status == ComplaintStatus.ASSIGNED:
+        if complaint.assigned_to_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Complaint must be assigned before setting status to ASSIGNED",
+            )
+
+    allowed_statuses = VALID_STATUS_TRANSITIONS.get(
+        current_status,
+        set(),
+    )
+
+    if new_status not in allowed_statuses:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Invalid status transition: "
+                f"{current_status.value} -> {new_status.value}"
+            ),
+        )
+
+    complaint.status = new_status
+
+    create_notification(
+        session=session,
+        user_id=complaint.reported_by_id,
+        title="Complaint Status Updated",
+        message=(
+            f"Your complaint '{complaint.title}' "
+            f"is now {new_status.value}."
+        ),
+    )
 
     session.add(complaint)
     session.commit()

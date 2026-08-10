@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str
     GOOGLE_REDIRECT_URI: str
     GOOGLE_ALLOWED_DOMAIN: str
+    
+    GEMINI_API_KEY: str
 
     AUTH_SESSION_SECRET: str
 

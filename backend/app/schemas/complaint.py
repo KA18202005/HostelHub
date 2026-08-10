@@ -10,9 +10,10 @@ from app.enums.complaint_status import ComplaintStatus
 class ComplaintCreate(SQLModel):
     title: str
     description: str
-    category: ComplaintCategory
-    priority: ComplaintPriority = ComplaintPriority.MEDIUM
     room_id: UUID
+
+    category: ComplaintCategory | None = None
+    priority: ComplaintPriority | None = None
 
 class ComplaintUpdate(SQLModel):
     title: str | None = None
@@ -33,6 +34,7 @@ class ComplaintRead(SQLModel):
     category: ComplaintCategory
     priority: ComplaintPriority
     status: ComplaintStatus
+    ai_reason: str | None
     room_id: UUID
     reported_by_id: UUID
     assigned_to_id: UUID | None
