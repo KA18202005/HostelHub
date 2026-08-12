@@ -33,6 +33,29 @@ def get_my_notifications(
     return session.exec(statement).all()
 
 
+
+@router.get(
+    "/unread",
+    response_model=list[NotificationRead],
+)
+def get_unread_notifications(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    statement = (
+        select(Notification)
+        .where(
+            Notification.user_id == current_user.id,
+            Notification.is_read == False,
+        )
+        .order_by(Notification.created_at.desc())
+    )
+
+    return session.exec(statement).all()
+
+
+
+
 @router.patch(
     "/{notification_id}/read",
     response_model=NotificationRead,
