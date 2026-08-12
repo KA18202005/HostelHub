@@ -13,6 +13,7 @@ from app.enums.complaint_priority import ComplaintPriority
 from app.services.notification_service import create_notification
 from app.models.complaint_history import ComplaintHistory
 from app.schemas.complaint import ComplaintHistoryRead
+from app.models.complaint_attachment import ComplaintAttachment
 from app.services.complaint_history_service import create_history
 from app.schemas.complaint import (
     ComplaintAssign,
@@ -23,6 +24,22 @@ from app.schemas.complaint import (
 )
 from sqlmodel import Session, select
 from uuid import UUID
+import os
+import uuid
+from pathlib import Path
+
+from fastapi import File, UploadFile
+
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+ALLOWED_IMAGE_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+}
+
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
 
 VALID_STATUS_TRANSITIONS = {
     ComplaintStatus.OPEN: {
@@ -391,6 +408,110 @@ def get_complaint_history(
     ]
 
 
+
+
+@router.post("/{complaint_id}/attachments")
+async def upload_complaint_attachment(
+    complaint_id: UUID,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    complaint = session.get(Complaint, complaint_id)
+
+    if complaint is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Complaint not found",
+        )
+
+    # Student can upload only to their own complaint.
+    if (
+        current_user.role == UserRole.STUDENT
+        and complaint.reported_by_id != current_user.id
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to attach files to this complaint",
+        )
+
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Only JPG, PNG, and WEBP images are allowed",
+        )
+
+    contents = await file.read()
+
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail="File size must not exceed 5 MB",
+        )
+
+    extension = Path(file.filename or "").suffix.lower()
+
+    if extension not in {".jpg", ".jpeg", ".png", ".webp"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid image extension",
+        )
+
+    stored_filename = f"{uuid.uuid4()}{extension}"
+
+    file_path = UPLOAD_DIR / stored_filename
+
+    with open(file_path, "wb") as buffer:
+        buffer.write(contents)
+
+    attachment = ComplaintAttachment(
+        complaint_id=complaint.id,
+        uploaded_by_id=current_user.id,
+        filename=file.filename or "attachment",
+        stored_filename=stored_filename,
+        content_type=file.content_type,
+        file_size=len(contents),
+    )
+
+    session.add(attachment)
+    session.commit()
+    session.refresh(attachment)
+
+    return attachment
+
+
+@router.get("/{complaint_id}/attachments")
+def get_complaint_attachments(
+    complaint_id: UUID,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    complaint = session.get(Complaint, complaint_id)
+
+    if complaint is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Complaint not found",
+        )
+
+    if (
+        current_user.role == UserRole.STUDENT
+        and complaint.reported_by_id != current_user.id
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to view these attachments",
+        )
+
+    statement = (
+        select(ComplaintAttachment)
+        .where(
+            ComplaintAttachment.complaint_id == complaint_id
+        )
+        .order_by(ComplaintAttachment.created_at.asc())
+    )
+
+    return session.exec(statement).all()
 
 
 @router.get(
