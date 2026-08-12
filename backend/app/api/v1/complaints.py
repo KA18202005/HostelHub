@@ -11,6 +11,9 @@ from app.services.ai.complaint_classifier import classify_complaint
 from app.enums.complaint_category import ComplaintCategory
 from app.enums.complaint_priority import ComplaintPriority
 from app.services.notification_service import create_notification
+from app.models.complaint_history import ComplaintHistory
+from app.schemas.complaint import ComplaintHistoryRead
+from app.services.complaint_history_service import create_history
 from app.schemas.complaint import (
     ComplaintAssign,
     ComplaintCreate,
@@ -102,6 +105,17 @@ def create_complaint(
     )
 
     session.add(complaint)
+    session.flush()
+
+    create_history(
+        session=session,
+        complaint_id=complaint.id,
+        user_id=current_user.id,
+        action="CREATED",
+        old_value=None,
+        new_value=complaint.status.value,
+    )
+
     session.commit()
     session.refresh(complaint)
     
@@ -213,6 +227,15 @@ def assign_complaint(
     complaint.assigned_to_id = staff_user.id
     complaint.status = ComplaintStatus.ASSIGNED
     
+    create_history(
+        session=session,
+        complaint_id=complaint.id,
+        user_id=current_user.id,
+        action="ASSIGNED",
+        old_value=None,
+        new_value=str(staff_user.id),
+    )
+        
     create_notification(
         session=session,
         user_id=complaint.reported_by_id,
@@ -282,8 +305,19 @@ def update_complaint_status(
             ),
         )
 
+    old_status = complaint.status
+
     complaint.status = new_status
 
+    create_history(
+        session=session,
+        complaint_id=complaint.id,
+        user_id=current_user.id,
+        action="STATUS_CHANGED",
+        old_value=old_status.value,
+        new_value=new_status.value,
+    )
+    
     create_notification(
         session=session,
         user_id=complaint.reported_by_id,
@@ -299,6 +333,62 @@ def update_complaint_status(
     session.refresh(complaint)
 
     return complaint
+
+
+
+
+@router.get(
+    "/{complaint_id}/history",
+    response_model=list[ComplaintHistoryRead],
+)
+def get_complaint_history(
+    complaint_id: UUID,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    complaint = session.get(Complaint, complaint_id)
+
+    if complaint is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Complaint not found",
+        )
+
+    # Students can only see their own complaint history.
+    # Staff/Admin can see any complaint.
+    if (
+        current_user.role == UserRole.STUDENT
+        and complaint.reported_by_id != current_user.id
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to view this complaint",
+        )
+
+    statement = (
+        select(ComplaintHistory, User)
+        .join(User, ComplaintHistory.user_id == User.id)
+        .where(
+            ComplaintHistory.complaint_id == complaint_id
+        )
+        .order_by(ComplaintHistory.created_at.asc())
+    )
+
+    results = session.exec(statement).all()
+
+    return [
+        ComplaintHistoryRead(
+            id=history.id,
+            complaint_id=history.complaint_id,
+            user_id=history.user_id,
+            user_name=user.name,
+            action=history.action,
+            old_value=history.old_value,
+            new_value=history.new_value,
+            created_at=history.created_at,
+        )
+        for history, user in results
+    ]
 
 
 

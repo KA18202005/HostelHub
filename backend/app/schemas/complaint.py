@@ -1,5 +1,5 @@
 from uuid import UUID
-
+from datetime import datetime
 from sqlmodel import SQLModel
 
 from app.enums.complaint_category import ComplaintCategory
@@ -38,3 +38,16 @@ class ComplaintRead(SQLModel):
     room_id: UUID
     reported_by_id: UUID
     assigned_to_id: UUID | None
+    
+    
+
+
+class ComplaintHistoryRead(SQLModel):
+    id: UUID
+    complaint_id: UUID
+    user_id: UUID
+    user_name: str
+    action: str
+    old_value: str | None
+    new_value: str | None
+    created_at: datetime
