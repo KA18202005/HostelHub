@@ -15,6 +15,8 @@ from app.models.complaint_history import ComplaintHistory
 from app.schemas.complaint import ComplaintHistoryRead
 from app.models.complaint_attachment import ComplaintAttachment
 from app.services.complaint_history_service import create_history
+from app.services.staff_assignment_service import get_least_loaded_staff
+from app.services.complaint_priority_service import requires_escalation
 from app.schemas.complaint import (
     ComplaintAssign,
     ComplaintCreate,
@@ -81,6 +83,7 @@ def create_complaint(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Room not found",
         )
+
     classification = None
 
     try:
@@ -124,6 +127,7 @@ def create_complaint(
     session.add(complaint)
     session.flush()
 
+    # Record complaint creation
     create_history(
         session=session,
         complaint_id=complaint.id,
@@ -133,29 +137,61 @@ def create_complaint(
         new_value=complaint.status.value,
     )
 
-    session.commit()
-    session.refresh(complaint)
-    
-    staff_users = session.exec(
-        select(User).where(
-            User.role.in_(
-                [UserRole.STAFF, UserRole.ADMIN]
-            )
-        )
-    ).all()
+    # Find the least-loaded staff member
+    staff_user = get_least_loaded_staff(session)
 
-    for staff_user in staff_users:
+    if staff_user is not None:
+        complaint.assigned_to_id = staff_user.id
+        complaint.status = ComplaintStatus.ASSIGNED
+
+        create_history(
+            session=session,
+            complaint_id=complaint.id,
+            user_id=current_user.id,
+            action="ASSIGNED",
+            old_value=None,
+            new_value=str(staff_user.id),
+        )
+
         create_notification(
             session=session,
-            user_id=staff_user.id,
-            title="New Complaint",
+            user_id=current_user.id,
+            title="Complaint Assigned",
             message=(
-                f"A new complaint '{complaint.title}' "
-                f"has been submitted."
+                f"Your complaint '{complaint.title}' "
+                f"has been automatically assigned to "
+                f"{staff_user.name}."
             ),
         )
 
+        if requires_escalation(complaint.priority):
+            admin_users = session.exec(
+                select(User).where(
+                    User.role == UserRole.ADMIN,
+                    User.is_active == True,
+                )
+            ).all()
+
+            for admin_user in admin_users:
+                create_notification(
+                    session=session,
+                    user_id=admin_user.id,
+                    title="Priority Complaint Alert",
+                    message=(
+                        f"{complaint.priority.value} priority complaint "
+                        f"'{complaint.title}' has been assigned to "
+                        f"{staff_user.name}."
+                    ),
+                )
+
+    session.add(complaint)
+    session.commit()
+    session.refresh(complaint)
+
     return complaint
+
+
+
 
 @router.get(
     "",

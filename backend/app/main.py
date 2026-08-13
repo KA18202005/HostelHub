@@ -9,6 +9,7 @@ from app.api.v1.hostels import router as hostels_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.attachments import router as attachments_router
+from app.api.v1.admin import router as admin_router
 
 app = FastAPI(title="HostelHub API")
 
@@ -26,6 +27,7 @@ app.include_router(hostels_router)
 app.include_router(notifications_router)
 app.include_router(attachments_router)
 app.include_router(dashboard_router)
+app.include_router(admin_router)
 
 @app.get("/")
 def root():

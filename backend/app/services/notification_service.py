@@ -18,7 +18,6 @@ def create_notification(
     )
 
     session.add(notification)
-    session.commit()
-    session.refresh(notification)
+    session.flush()
 
     return notification
