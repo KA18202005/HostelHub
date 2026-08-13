@@ -17,6 +17,9 @@ from app.models.complaint_attachment import ComplaintAttachment
 from app.services.complaint_history_service import create_history
 from app.services.staff_assignment_service import get_least_loaded_staff
 from app.services.complaint_priority_service import requires_escalation
+from app.services.complaint_duplicate_service import (
+    check_for_duplicate_complaint,
+)
 from app.schemas.complaint import (
     ComplaintAssign,
     ComplaintCreate,
@@ -82,6 +85,26 @@ def create_complaint(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Room not found",
+        )
+
+    duplicate_result = check_for_duplicate_complaint(
+        session=session,
+        room_id=complaint_data.room_id,
+        title=complaint_data.title,
+        description=complaint_data.description,
+    )
+
+    if duplicate_result.is_duplicate:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "A similar active complaint already exists.",
+                "similar_complaint_id": str(
+                    duplicate_result.similar_complaint_id
+                ),
+                "confidence": duplicate_result.confidence,
+                "reason": duplicate_result.reason,
+            },
         )
 
     classification = None
