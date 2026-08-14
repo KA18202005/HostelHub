@@ -1,5 +1,7 @@
 import os
-
+import secrets
+from typing import Dict
+from httpcore import request
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from google_auth_oauthlib.flow import Flow
@@ -12,6 +14,8 @@ from app.db.database import get_session
 from app.enums.roles import UserRole
 from app.models.user import User
 from app.api.dependencies import get_current_user
+
+oauth_sessions: Dict[str, str] = {}
 
 
 # OAuth development settings
@@ -67,8 +71,10 @@ async def google_login(request: Request):
         hd=settings.GOOGLE_ALLOWED_DOMAIN,
     )
 
-    request.session["oauth_state"] = state
-    request.session["code_verifier"] = flow.code_verifier
+    oauth_sessions[state] = flow.code_verifier
+
+    print("LOGIN STATE:", state)
+    print("LOGIN VERIFIER:", flow.code_verifier)
 
     return RedirectResponse(
         authorization_url
@@ -80,8 +86,7 @@ async def google_callback(
     request: Request,
     session: Session = Depends(get_session),
 ):
-    # 1. Get OAuth state
-    state = request.session.get("oauth_state")
+    state = request.query_params.get("state")
 
     if not state:
         raise HTTPException(
@@ -89,22 +94,22 @@ async def google_callback(
             detail="OAuth state missing",
         )
 
-    # 2. Get PKCE code verifier
-    code_verifier = request.session.get("code_verifier")
+    code_verifier = oauth_sessions.pop(state, None)
 
     if not code_verifier:
         raise HTTPException(
             status_code=400,
-            detail="OAuth code verifier missing",
+            detail="OAuth session expired or invalid. Please restart Google login.",
         )
 
-    # 3. Recreate Google OAuth flow
+    print("CALLBACK STATE:", state)
+    print("CALLBACK VERIFIER:", code_verifier)
+
     flow = create_google_flow()
 
     flow.state = state
     flow.code_verifier = code_verifier
 
-    # 4. Exchange authorization code for Google tokens
     flow.fetch_token(
         authorization_response=str(request.url)
     )
@@ -162,17 +167,13 @@ async def google_callback(
     role=user.role.value,
 )
 
-    return {
-        "message": message,
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": {
-            "id": str(user.id),
-            "name": user.name,
-            "email": user.email,
-            "role": user.role.value,
-        },
-    }
+    frontend_url = "http://localhost:3000"
+
+    response = RedirectResponse(
+        url=f"{frontend_url}/auth/callback?access_token={access_token}"
+    )
+
+    return response
     
 @router.get("/me")
 async def get_current_user_info(

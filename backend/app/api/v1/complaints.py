@@ -79,17 +79,35 @@ def create_complaint(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    room = session.get(Room, complaint_data.room_id)
+        # Resolve the student's human-readable room details
+    # into the actual Room UUID stored in the database.
+
+    room_query = select(Room).where(
+        Room.block == complaint_data.block.upper(),
+        Room.floor == complaint_data.floor,
+        Room.room_number == complaint_data.room_number,
+    )
+
+    if complaint_data.apartment:
+        room_query = room_query.where(
+            Room.apartment == complaint_data.apartment.upper()
+        )
+    else:
+        room_query = room_query.where(
+            Room.apartment == None
+        )
+
+    room = session.exec(room_query).first()
 
     if room is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Room not found",
-        )
+            detail="Room not found for the selected block, floor, apartment and room number.",
+    )
 
     duplicate_result = check_for_duplicate_complaint(
         session=session,
-        room_id=complaint_data.room_id,
+        room_id=room.id,
         title=complaint_data.title,
         description=complaint_data.description,
     )
@@ -143,7 +161,7 @@ def create_complaint(
         category=category,
         priority=priority,
         ai_reason=ai_reason,
-        room_id=complaint_data.room_id,
+        room_id=room.id,
         reported_by_id=current_user.id,
     )
 

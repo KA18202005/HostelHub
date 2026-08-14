@@ -6,7 +6,11 @@ from app.db.database import get_session
 from app.models.hostel import Hostel
 from app.models.room import Room
 from app.models.user import User
-from app.schemas.room import RoomCreate, RoomRead
+from app.schemas.room import (
+    RoomCreate,
+    RoomRead,
+    RoomOptionRead,
+)
 
 
 router = APIRouter(
@@ -60,3 +64,55 @@ def create_room(
     session.refresh(room)
 
     return room
+
+@router.get(
+    "/options",
+    response_model=list[RoomOptionRead],
+)
+def get_room_options(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    statement = (
+        select(Room)
+        .order_by(
+            Room.block,
+            Room.floor,
+            Room.apartment,
+            Room.room_number,
+        )
+    )
+
+    rooms = session.exec(statement).all()
+
+    return [
+        RoomOptionRead(
+            id=room.id,
+            block=room.block,
+            floor=room.floor,
+            apartment=room.apartment,
+            room_number=room.room_number,
+            capacity=room.capacity,
+        )
+        for room in rooms
+    ]
+
+@router.get(
+    "",
+    response_model=list[RoomRead],
+)
+def get_rooms(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    rooms = session.exec(
+        select(Room).order_by(
+            Room.block,
+            Room.floor,
+            Room.room_number,
+        )
+    ).all()
+
+    return rooms
+
+

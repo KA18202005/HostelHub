@@ -37,6 +37,11 @@ class Room(SQLModel, table=True):
     hostel: "Hostel" = Relationship(
         back_populates="rooms"
     )
+    
+    apartment: str | None = Field(
+        default=None,
+        max_length=10,
+    )
 
     students: list["User"] = Relationship(
         back_populates="room"

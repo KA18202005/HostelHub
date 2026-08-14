@@ -9,6 +9,7 @@ class RoomCreate(SQLModel):
     floor: int
     capacity: int
     hostel_id: UUID
+    apartment: str | None = None
 
 
 class RoomRead(SQLModel):
@@ -18,3 +19,13 @@ class RoomRead(SQLModel):
     floor: int
     capacity: int
     hostel_id: UUID
+    apartment: str | None
+
+
+class RoomOptionRead(SQLModel):
+    id: UUID
+    block: str
+    floor: int
+    apartment: str | None = None
+    room_number: str
+    capacity: int

@@ -10,7 +10,11 @@ from app.enums.complaint_status import ComplaintStatus
 class ComplaintCreate(SQLModel):
     title: str
     description: str
-    room_id: UUID
+
+    block: str
+    floor: int
+    room_number: str
+    apartment: str | None = None
 
     category: ComplaintCategory | None = None
     priority: ComplaintPriority | None = None
