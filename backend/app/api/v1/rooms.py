@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
+from uuid import UUID
 
 from app.api.dependencies import get_current_user
 from app.db.database import get_session
@@ -96,6 +97,27 @@ def get_room_options(
         )
         for room in rooms
     ]
+    
+
+@router.get(
+    "/{room_id}",
+    response_model=RoomRead,
+)
+def get_room(
+    room_id: UUID,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    room = session.get(Room, room_id)
+
+    if room is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Room not found",
+        )
+
+    return room
+
 
 @router.get(
     "",

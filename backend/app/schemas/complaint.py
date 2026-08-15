@@ -1,7 +1,7 @@
 from uuid import UUID
 from datetime import datetime
 from sqlmodel import SQLModel
-
+from app.models.room import Room
 from app.enums.complaint_category import ComplaintCategory
 from app.enums.complaint_priority import ComplaintPriority
 from app.enums.complaint_status import ComplaintStatus
@@ -35,14 +35,21 @@ class ComplaintRead(SQLModel):
     id: UUID
     title: str
     description: str
+
     category: ComplaintCategory
     priority: ComplaintPriority
     status: ComplaintStatus
     ai_reason: str | None
+
     room_id: UUID
+
+    block: str
+    floor: int
+    room_number: str
+    apartment: str | None = None
+
     reported_by_id: UUID
     assigned_to_id: UUID | None
-    
     
 
 

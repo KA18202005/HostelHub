@@ -27,6 +27,7 @@ from app.schemas.complaint import (
     ComplaintStatusUpdate,
     ComplaintUpdate,
 )
+from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 from uuid import UUID
 import os
@@ -229,7 +230,22 @@ def create_complaint(
     session.commit()
     session.refresh(complaint)
 
-    return complaint
+    return ComplaintRead(
+        id=complaint.id,
+        title=complaint.title,
+        description=complaint.description,
+        category=complaint.category,
+        priority=complaint.priority,
+        status=complaint.status,
+        ai_reason=complaint.ai_reason,
+        room_id=room.id,
+        block=room.block,
+        floor=room.floor,
+        room_number=room.room_number,
+        apartment=room.apartment,
+        reported_by_id=complaint.reported_by_id,
+        assigned_to_id=complaint.assigned_to_id,
+    )
 
 
 
@@ -247,12 +263,39 @@ def get_my_complaints(
         .where(
             Complaint.reported_by_id == current_user.id
         )
+        .options(
+            selectinload(Complaint.room)
+        )
         .order_by(
             Complaint.created_at.desc()
         )
     )
 
-    return session.exec(statement).all()
+    complaints = session.exec(statement).all()
+
+    return [
+        ComplaintRead(
+            id=complaint.id,
+            title=complaint.title,
+            description=complaint.description,
+            category=complaint.category,
+            priority=complaint.priority,
+            status=complaint.status,
+            ai_reason=complaint.ai_reason,
+
+            room_id=complaint.room_id,
+
+            block=complaint.room.block,
+            floor=complaint.room.floor,
+            room_number=complaint.room.room_number,
+            apartment=complaint.room.apartment,
+
+            reported_by_id=complaint.reported_by_id,
+            assigned_to_id=complaint.assigned_to_id,
+        )
+        for complaint in complaints
+    ]
+    
 
 @router.get(
     "/all",
@@ -608,13 +651,32 @@ def get_complaint(
             detail="Complaint not found",
         )
 
-    if complaint.reported_by_id != current_user.id:
+    room = session.get(Room, complaint.room_id)
+
+    if room is None:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to view this complaint",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Room associated with complaint not found",
         )
 
-    return complaint
+    return ComplaintRead(
+        id=complaint.id,
+        title=complaint.title,
+        description=complaint.description,
+        category=complaint.category,
+        priority=complaint.priority,
+        status=complaint.status,
+        ai_reason=complaint.ai_reason,
+
+        room_id=room.id,
+        block=room.block,
+        floor=room.floor,
+        room_number=room.room_number,
+        apartment=room.apartment,
+
+        reported_by_id=complaint.reported_by_id,
+        assigned_to_id=complaint.assigned_to_id,
+    )
 
 
 

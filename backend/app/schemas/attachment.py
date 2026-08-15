@@ -9,6 +9,7 @@ class ComplaintAttachmentRead(SQLModel):
     complaint_id: UUID
     uploaded_by_id: UUID
     filename: str
+    stored_filename: str
     content_type: str
     file_size: int
     created_at: datetime
