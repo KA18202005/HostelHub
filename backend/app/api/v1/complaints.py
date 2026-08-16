@@ -312,10 +312,37 @@ def get_all_complaints(
 ):
     statement = (
         select(Complaint)
-        .order_by(Complaint.created_at.desc())
+        .options(
+            selectinload(Complaint.room)
+        )
+        .order_by(
+            Complaint.created_at.desc()
+        )
     )
 
-    return session.exec(statement).all()
+    complaints = session.exec(statement).all()
+
+    return [
+        ComplaintRead(
+            id=complaint.id,
+            title=complaint.title,
+            description=complaint.description,
+            category=complaint.category,
+            priority=complaint.priority,
+            status=complaint.status,
+            ai_reason=complaint.ai_reason,
+
+            room_id=complaint.room_id,
+            block=complaint.room.block,
+            floor=complaint.room.floor,
+            room_number=complaint.room.room_number,
+            apartment=complaint.room.apartment,
+
+            reported_by_id=complaint.reported_by_id,
+            assigned_to_id=complaint.assigned_to_id,
+        )
+        for complaint in complaints
+    ]
 
 
 @router.patch(
@@ -387,7 +414,30 @@ def assign_complaint(
     session.commit()
     session.refresh(complaint)
 
-    return complaint
+    room = session.get(Room, complaint.room_id)
+
+    if room is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Complaint room not found",
+        )
+
+    return ComplaintRead(
+        id=complaint.id,
+        title=complaint.title,
+        description=complaint.description,
+        category=complaint.category,
+        priority=complaint.priority,
+        status=complaint.status,
+        ai_reason=complaint.ai_reason,
+        room_id=complaint.room_id,
+        block=room.block,
+        floor=room.floor,
+        room_number=room.room_number,
+        apartment=room.apartment,
+        reported_by_id=complaint.reported_by_id,
+        assigned_to_id=complaint.assigned_to_id,
+    )
 
 
 
@@ -469,7 +519,30 @@ def update_complaint_status(
     session.commit()
     session.refresh(complaint)
 
-    return complaint
+    room = session.get(Room, complaint.room_id)
+
+    if room is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Complaint room not found",
+        )
+
+    return ComplaintRead(
+        id=complaint.id,
+        title=complaint.title,
+        description=complaint.description,
+        category=complaint.category,
+        priority=complaint.priority,
+        status=complaint.status,
+        ai_reason=complaint.ai_reason,
+        room_id=complaint.room_id,
+        block=room.block,
+        floor=room.floor,
+        room_number=room.room_number,
+        apartment=room.apartment,
+        reported_by_id=complaint.reported_by_id,
+        assigned_to_id=complaint.assigned_to_id,
+    )
 
 
 

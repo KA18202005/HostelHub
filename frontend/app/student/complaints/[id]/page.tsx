@@ -12,7 +12,14 @@ type Complaint = {
     priority: string;
     status: string;
     ai_reason: string | null;
+
     room_id: string;
+
+    block: string;
+    floor: number;
+    room_number: string;
+    apartment: string | null;
+
     reported_by_id: string;
     assigned_to_id: string | null;
 };
@@ -52,6 +59,28 @@ function formatStatus(status: string) {
     return status.replaceAll("_", " ");
 }
 
+function statusStep(status: string) {
+    switch (status) {
+        case "OPEN":
+            return 1;
+
+        case "ASSIGNED":
+            return 2;
+
+        case "IN_PROGRESS":
+            return 3;
+
+        case "RESOLVED":
+            return 4;
+
+        case "CLOSED":
+            return 5;
+
+        default:
+            return 1;
+    }
+}
+
 function formatDate(date: string) {
     return new Date(date).toLocaleString();
 }
@@ -69,50 +98,63 @@ export default function ComplaintDetailPage() {
     const [uploading, setUploading] = useState(false);
     const [uploadError, setUploadError] = useState("");
 
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [previewName, setPreviewName] = useState<string>("");
+
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
+    async function loadComplaint() {
+        try {
+            setLoading(true);
+            setError("");
+
+            const complaintResponse = await api.get(
+                `/api/v1/complaints/${complaintId}`
+            );
+
+            const complaintData = complaintResponse.data;
+
+            setComplaint(complaintData);
+
+            const [roomResponse, historyResponse, attachmentResponse] =
+                await Promise.all([
+                    api.get(
+                        `/api/v1/rooms/${complaintData.room_id}`
+                    ),
+                    api.get(
+                        `/api/v1/complaints/${complaintId}/history`
+                    ),
+                    api.get(
+                        `/api/v1/attachments/${complaintId}/attachments`
+                    ),
+                ]);
+
+            setRoom(roomResponse.data);
+            setHistory(historyResponse.data);
+            setAttachments(attachmentResponse.data);
+        } catch (err) {
+            console.error(err);
+            setError("Unable to load complaint.");
+        } finally {
+            setLoading(false);
+        }
+    }
+
     useEffect(() => {
-        async function loadComplaint() {
-            try {
-                setLoading(true);
-                setError("");
-
-                const complaintResponse = await api.get(
-                    `/api/v1/complaints/${complaintId}`,
-                );
-
-                const complaintData = complaintResponse.data;
-
-                setComplaint(complaintData);
-
-                const [roomResponse, historyResponse, attachmentResponse] =
-                    await Promise.all([
-                        api.get(
-                            `/api/v1/rooms/${complaintData.room_id}`,
-                        ),
-                        api.get(
-                            `/api/v1/complaints/${complaintId}/history`,
-                        ),
-                        api.get(
-                            `/api/v1/attachments/${complaintId}/attachments`,
-                        ),
-                    ]);
-
-                setRoom(roomResponse.data);
-                setHistory(historyResponse.data);
-                setAttachments(attachmentResponse.data);
-            } catch (err) {
-                console.error(err);
-                setError("Unable to load complaint.");
-            } finally {
-                setLoading(false);
-            }
+        if (!complaintId) {
+            return;
         }
 
-        if (complaintId) {
+        loadComplaint();
+
+        const interval = setInterval(() => {
             loadComplaint();
-        }
+        }, 30000);
+
+        return () => {
+            clearInterval(interval);
+        };
     }, [complaintId]);
 
     async function handleUpload(
@@ -169,11 +211,8 @@ export default function ComplaintDetailPage() {
 
             const url = window.URL.createObjectURL(response.data);
 
-            window.open(url, "_blank");
-
-            setTimeout(() => {
-                window.URL.revokeObjectURL(url);
-            }, 10000);
+            setPreviewUrl(url);
+            setPreviewName(storedFilename);
         } catch (error) {
             console.error("Failed to open attachment:", error);
         }
@@ -223,12 +262,10 @@ export default function ComplaintDetailPage() {
             <div className="mx-auto max-w-4xl space-y-6">
 
                 {/* Header */}
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <button
-                            onClick={() =>
-                                router.push("/student")
-                            }
+                            onClick={() => router.push("/student")}
                             className="mb-3 text-sm text-zinc-500 hover:text-zinc-900"
                         >
                             ← Back to dashboard
@@ -239,11 +276,34 @@ export default function ComplaintDetailPage() {
                         </h1>
                     </div>
 
-                    <span className="rounded-full bg-zinc-100 px-3 py-1 text-sm font-medium text-zinc-700">
-                        {formatStatus(complaint.status)}
-                    </span>
-                </div>
+                    <div className="flex items-center gap-3">
+                        <span
+                            className={`rounded-full px-3 py-1 text-sm font-medium ${complaint.status === "OPEN"
+                                ? "bg-blue-100 text-blue-700"
+                                : complaint.status === "ASSIGNED"
+                                    ? "bg-purple-100 text-purple-700"
+                                    : complaint.status === "IN_PROGRESS"
+                                        ? "bg-yellow-100 text-yellow-700"
+                                        : complaint.status === "RESOLVED"
+                                            ? "bg-green-100 text-green-700"
+                                            : complaint.status === "CLOSED"
+                                                ? "bg-zinc-100 text-zinc-600"
+                                                : "bg-zinc-100 text-zinc-700"
+                                }`}
+                        >
+                            {formatStatus(complaint.status)}
+                        </span>
 
+                        <button
+                            type="button"
+                            onClick={loadComplaint}
+                            disabled={loading}
+                            className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {loading ? "Refreshing..." : "Refresh"}
+                        </button>
+                    </div>
+                </div>
                 {/* Complaint */}
                 <section className="rounded-xl border border-zinc-200 bg-white p-6">
                     <h2 className="text-xl font-semibold text-zinc-900">
@@ -286,6 +346,66 @@ export default function ComplaintDetailPage() {
                                     : "Not assigned"}
                             </p>
                         </div>
+                    </div>
+                </section>
+
+
+                <section className="rounded-xl border border-zinc-200 bg-white p-6">
+                    <h2 className="text-lg font-semibold text-zinc-900">
+                        Complaint Progress
+                    </h2>
+
+                    <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-0">
+                        {[
+                            { step: 1, label: "Submitted" },
+                            { step: 2, label: "Assigned" },
+                            { step: 3, label: "In Progress" },
+                            { step: 4, label: "Resolved" },
+                            { step: 5, label: "Closed" },
+                        ].map((item, index, steps) => {
+                            const currentStep = statusStep(
+                                complaint.status
+                            );
+
+                            const completed = item.step <= currentStep;
+                            const isLast = index === steps.length - 1;
+
+                            return (
+                                <div
+                                    key={item.step}
+                                    className="flex flex-1 items-start sm:flex-col sm:items-center"
+                                >
+                                    <div className="flex flex-col items-center sm:w-full sm:flex-row">
+                                        <div
+                                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${completed
+                                                    ? "bg-zinc-900 text-white"
+                                                    : "bg-zinc-100 text-zinc-400"
+                                                }`}
+                                        >
+                                            {item.step}
+                                        </div>
+
+                                        {!isLast && (
+                                            <div
+                                                className={`h-8 w-0.5 sm:h-0.5 sm:flex-1 ${item.step < currentStep
+                                                        ? "bg-zinc-900"
+                                                        : "bg-zinc-200"
+                                                    }`}
+                                            />
+                                        )}
+                                    </div>
+
+                                    <p
+                                        className={`mt-2 text-sm font-medium ${completed
+                                                ? "text-zinc-900"
+                                                : "text-zinc-400"
+                                            }`}
+                                    >
+                                        {item.label}
+                                    </p>
+                                </div>
+                            );
+                        })}
                     </div>
                 </section>
 
@@ -440,6 +560,34 @@ export default function ComplaintDetailPage() {
                                     </div>
                                 );
                             })}
+                        </div>
+                    )}
+
+                    {previewUrl && (
+                        <div className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+                            <div className="mb-3 flex items-center justify-between">
+                                <p className="truncate text-sm font-medium text-zinc-900">
+                                    {previewName}
+                                </p>
+
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        URL.revokeObjectURL(previewUrl);
+                                        setPreviewUrl(null);
+                                        setPreviewName("");
+                                    }}
+                                    className="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-200"
+                                >
+                                    Close
+                                </button>
+                            </div>
+
+                            <img
+                                src={previewUrl}
+                                alt={previewName}
+                                className="max-h-150 w-full rounded-lg object-contain"
+                            />
                         </div>
                     )}
                 </section>

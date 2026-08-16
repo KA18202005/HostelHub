@@ -41,6 +41,40 @@ def get_users(
 
 
 
+@router.get(
+    "/staff",
+    response_model=list[AdminUserRead],
+)
+def get_staff_users(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    if current_user.role not in (
+        UserRole.STAFF,
+        UserRole.ADMIN,
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Staff or admin access required",
+        )
+
+    statement = (
+        select(User)
+        .where(
+            User.role.in_(
+                [
+                    UserRole.STAFF,
+                    UserRole.ADMIN,
+                ]
+            ),
+            User.is_active == True,
+        )
+        .order_by(User.name.asc())
+    )
+
+    return session.exec(statement).all()
+
+
 @router.patch(
     "/users/{user_id}/role",
     response_model=AdminUserRead,
