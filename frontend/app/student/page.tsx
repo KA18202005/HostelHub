@@ -1,9 +1,15 @@
 "use client";
 
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Bell, CheckCircle2, Clock3, FileText, Plus } from "lucide-react";
+import {
+    Bell,
+    CheckCircle2,
+    Clock3,
+    FileText,
+    Plus,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
-
 import api from "@/lib/api";
 
 type ComplaintStatus =
@@ -86,6 +92,30 @@ function statusClass(status: ComplaintStatus) {
 
 export default function StudentDashboardPage() {
     const router = useRouter();
+
+    useEffect(() => {
+        async function checkStudentAccess() {
+            try {
+                const response = await api.get(
+                    "/api/v1/auth/me"
+                );
+
+                if (response.data.role !== "STUDENT") {
+                    router.replace("/dashboard");
+                }
+            } catch (error) {
+                console.error(
+                    "Authentication failed:",
+                    error
+                );
+
+                localStorage.removeItem("access_token");
+                router.replace("/login");
+            }
+        }
+
+        checkStudentAccess();
+    }, [router]);
 
     const { data, isLoading, isError } = useQuery({
         queryKey: ["student-dashboard"],

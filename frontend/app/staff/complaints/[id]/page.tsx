@@ -277,7 +277,7 @@ export default function StaffComplaintDetailPage() {
                 <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-6">
                     <button
                         type="button"
-                        onClick={() => router.push("/staff")}
+                        onClick={() => router.push("/dashboard")}
                         className="text-xl font-bold text-zinc-900"
                     >
                         HostelHub

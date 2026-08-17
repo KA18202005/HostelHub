@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Bell } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import api from "@/lib/api";
@@ -23,6 +25,15 @@ type StaffDashboard = {
     recent_complaints: Complaint[];
 };
 
+type Notification = {
+    id: string;
+    title: string;
+    message: string;
+    is_read: boolean;
+    user_id: string;
+    created_at: string;
+};
+
 async function getStaffDashboard(): Promise<StaffDashboard> {
     const response = await api.get(
         "/api/v1/dashboard/staff"
@@ -33,6 +44,52 @@ async function getStaffDashboard(): Promise<StaffDashboard> {
 
 export default function StaffPage() {
     const router = useRouter();
+
+    useEffect(() => {
+        async function checkStaffAccess() {
+            try {
+                const response = await api.get(
+                    "/api/v1/auth/me"
+                );
+
+                const role = response.data.role;
+
+                if (
+                    role !== "STAFF" &&
+                    role !== "ADMIN"
+                ) {
+                    router.replace("/dashboard");
+                }
+            } catch (error) {
+                console.error(
+                    "Authentication failed:",
+                    error
+                );
+
+                localStorage.removeItem("access_token");
+                router.replace("/login");
+            }
+        }
+
+        checkStaffAccess();
+    }, [router]);
+
+    const {
+        data: notifications = [],
+    } = useQuery<Notification[]>({
+        queryKey: ["staff-notifications"],
+        queryFn: async () => {
+            const response = await api.get(
+                "/api/v1/notifications"
+            );
+
+            return response.data;
+        },
+    });
+
+    const unreadNotifications = notifications.filter(
+        (notification) => !notification.is_read
+    ).length;
 
     const {
         data,
@@ -96,9 +153,28 @@ export default function StaffPage() {
                         HostelHub
                     </button>
 
-                    <span className="text-sm font-medium text-zinc-500">
-                        Staff Dashboard
-                    </span>
+                    <div className="flex items-center gap-4">
+                        <button
+                            type="button"
+                            onClick={() => router.push("/notifications")}
+                            className="relative rounded-lg p-2 text-zinc-600 transition hover:bg-zinc-100"
+                            aria-label="Notifications"
+                        >
+                            <Bell size={21} />
+
+                            {unreadNotifications > 0 && (
+                                <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                                    {unreadNotifications > 9
+                                        ? "9+"
+                                        : unreadNotifications}
+                                </span>
+                            )}
+                        </button>
+
+                        <span className="text-sm font-medium text-zinc-500">
+                            Staff Dashboard
+                        </span>
+                    </div>
                 </div>
             </header>
 

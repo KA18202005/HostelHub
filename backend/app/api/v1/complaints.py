@@ -409,6 +409,16 @@ def assign_complaint(
             f"has been assigned to {staff_user.name}."
         ),
     )
+    
+    create_notification(
+        session=session,
+        user_id=staff_user.id,
+        title="Complaint Assigned to You",
+        message=(
+            f'Complaint "{complaint.title}" '
+            f'has been assigned to you.'
+        ),
+    )
 
     session.add(complaint)
     session.commit()
@@ -514,6 +524,18 @@ def update_complaint_status(
             f"is now {new_status.value}."
         ),
     )
+    
+    
+    if complaint.assigned_to_id is not None:
+        create_notification(
+            session=session,
+            user_id=complaint.assigned_to_id,
+            title="Complaint Status Updated",
+            message=(
+                f'Complaint "{complaint.title}" '
+                f'is now {new_status.value}.'
+            ),
+        )
 
     session.add(complaint)
     session.commit()
