@@ -120,6 +120,7 @@ export default function StudentDashboardPage() {
     const { data, isLoading, isError } = useQuery({
         queryKey: ["student-dashboard"],
         queryFn: getStudentDashboard,
+        refetchInterval: 30000,
     });
 
     if (isLoading) {

@@ -313,7 +313,8 @@ def get_all_complaints(
     statement = (
         select(Complaint)
         .options(
-            selectinload(Complaint.room)
+            selectinload(Complaint.room),
+            selectinload(Complaint.reported_by),
         )
         .order_by(
             Complaint.created_at.desc()
@@ -339,6 +340,8 @@ def get_all_complaints(
             apartment=complaint.room.apartment,
 
             reported_by_id=complaint.reported_by_id,
+            reported_by_name=complaint.reported_by.name,
+            reported_by_email=complaint.reported_by.email,
             assigned_to_id=complaint.assigned_to_id,
         )
         for complaint in complaints
@@ -446,6 +449,8 @@ def assign_complaint(
         room_number=room.room_number,
         apartment=room.apartment,
         reported_by_id=complaint.reported_by_id,
+        reported_by_name=complaint.reported_by.name,
+        reported_by_email=complaint.reported_by.email,
         assigned_to_id=complaint.assigned_to_id,
     )
 
@@ -563,6 +568,8 @@ def update_complaint_status(
         room_number=room.room_number,
         apartment=room.apartment,
         reported_by_id=complaint.reported_by_id,
+        reported_by_name=complaint.reported_by.name,
+        reported_by_email=complaint.reported_by.email,
         assigned_to_id=complaint.assigned_to_id,
     )
 
@@ -762,14 +769,14 @@ def get_complaint(
         priority=complaint.priority,
         status=complaint.status,
         ai_reason=complaint.ai_reason,
-
-        room_id=room.id,
+        room_id=complaint.room_id,
         block=room.block,
         floor=room.floor,
         room_number=room.room_number,
         apartment=room.apartment,
-
         reported_by_id=complaint.reported_by_id,
+        reported_by_name=complaint.reported_by.name,
+        reported_by_email=complaint.reported_by.email,
         assigned_to_id=complaint.assigned_to_id,
     )
 

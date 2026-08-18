@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-
+import { Bell } from "lucide-react";
 
 import api from "@/lib/api";
 
@@ -28,6 +28,15 @@ type AdminDashboard = {
     closed_complaints: number;
 };
 
+type Notification = {
+    id: string;
+    title: string;
+    message: string;
+    is_read: boolean;
+    user_id: string;
+    created_at: string;
+};
+
 async function getAdminUsers(): Promise<AdminUser[]> {
     const response = await api.get(
         "/api/v1/admin/users"
@@ -46,6 +55,20 @@ async function getAdminDashboard(): Promise<AdminDashboard> {
 
 export default function AdminPage() {
     const router = useRouter();
+
+    const { data: unreadNotifications = [] } = useQuery({
+        queryKey: ["notifications", "unread"],
+        queryFn: async () => {
+            const response = await api.get(
+                "/api/v1/notifications/unread"
+            );
+
+            return response.data;
+        },
+        refetchInterval: 30000,
+    });
+
+    const unreadCount = unreadNotifications.length;
 
     useEffect(() => {
         async function checkAdminAccess() {
@@ -237,9 +260,28 @@ export default function AdminPage() {
                         HostelHub
                     </button>
 
-                    <span className="text-sm font-medium text-zinc-500">
-                        Admin Dashboard
-                    </span>
+                    <div className="flex items-center gap-4">
+                        <button
+                            type="button"
+                            onClick={() => router.push("/notifications")}
+                            className="relative rounded-lg p-2 text-zinc-600 transition hover:bg-zinc-100"
+                            aria-label="Notifications"
+                        >
+                            <Bell size={21} />
+
+                            {unreadCount > 0 && (
+                                <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                                    {unreadCount > 9
+                                        ? "9+"
+                                        : unreadCount}
+                                </span>
+                            )}
+                        </button>
+
+                        <span className="text-sm font-medium text-zinc-500">
+                            Admin Dashboard
+                        </span>
+                    </div>
                 </div>
             </header>
 

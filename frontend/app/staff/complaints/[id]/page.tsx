@@ -34,6 +34,8 @@ type Complaint = {
     apartment: string | null;
 
     reported_by_id: string;
+    reported_by_name: string;
+    reported_by_email: string;
     assigned_to_id: string | null;
 };
 
@@ -384,8 +386,12 @@ export default function StaffComplaintDetailPage() {
                                 Reported By
                             </p>
 
-                            <p className="mt-1 break-all text-sm text-zinc-700">
-                                {complaint.reported_by_id}
+                            <p className="mt-1 text-sm font-semibold text-zinc-900">
+                                {complaint.reported_by_name}
+                            </p>
+
+                            <p className="mt-1 text-xs text-zinc-500">
+                                {complaint.reported_by_email}
                             </p>
                         </div>
 

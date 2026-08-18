@@ -98,6 +98,12 @@ def update_user_role(
             status_code=404,
             detail="User not found",
         )
+        
+    if user.id == current_user.id:
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot change your own role",
+        )
 
     user.role = data.role
 

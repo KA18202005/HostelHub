@@ -74,22 +74,19 @@ export default function StaffPage() {
         checkStaffAccess();
     }, [router]);
 
-    const {
-        data: notifications = [],
-    } = useQuery<Notification[]>({
-        queryKey: ["staff-notifications"],
+    const { data: unreadNotifications = [] } = useQuery({
+        queryKey: ["notifications", "unread"],
         queryFn: async () => {
             const response = await api.get(
-                "/api/v1/notifications"
+                "/api/v1/notifications/unread"
             );
 
             return response.data;
         },
+        refetchInterval: 30000,
     });
 
-    const unreadNotifications = notifications.filter(
-        (notification) => !notification.is_read
-    ).length;
+    const unreadCount = unreadNotifications.length;
 
     const {
         data,
@@ -162,11 +159,11 @@ export default function StaffPage() {
                         >
                             <Bell size={21} />
 
-                            {unreadNotifications > 0 && (
+                            {unreadCount > 0 && (
                                 <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                                    {unreadNotifications > 9
+                                    {unreadCount > 9
                                         ? "9+"
-                                        : unreadNotifications}
+                                        : unreadCount}
                                 </span>
                             )}
                         </button>

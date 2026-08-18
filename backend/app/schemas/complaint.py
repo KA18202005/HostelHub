@@ -49,8 +49,11 @@ class ComplaintRead(SQLModel):
     apartment: str | None = None
 
     reported_by_id: UUID
+    reported_by_name: str
+    reported_by_email: str
+
     assigned_to_id: UUID | None
-    
+        
 
 
 class ComplaintHistoryRead(SQLModel):

@@ -12,7 +12,6 @@ from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.attachments import router as attachments_router
 from app.api.v1.admin import router as admin_router
 from app.api.v1.announcements import router as announcements_router
-
 app = FastAPI(title="HostelHub API")
 
 
