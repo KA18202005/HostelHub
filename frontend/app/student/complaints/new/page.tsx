@@ -3,7 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-
+import { useEffect } from "react";
 import api from "@/lib/api";
 
 type Room = {
@@ -33,12 +33,8 @@ export default function NewComplaintPage() {
 
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
-
-    const [selectedBlock, setSelectedBlock] = useState("");
-    const [selectedFloor, setSelectedFloor] = useState("");
-    const [selectedApartment, setSelectedApartment] = useState("");
-    const [selectedRoom, setSelectedRoom] = useState("");
-
+    const [currentUser, setCurrentUser] = useState<any>(null);
+    const [loadingUser, setLoadingUser] = useState(true);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [duplicate, setDuplicate] =
@@ -53,72 +49,22 @@ export default function NewComplaintPage() {
         queryFn: getRooms,
     });
 
-    const blocks = useMemo(() => {
-        return Array.from(
-            new Set(rooms.map((room) => room.block)),
-        ).sort();
-    }, [rooms]);
+    useEffect(() => {
+        async function loadUser() {
+            try {
+                const response = await api.get("/api/v1/auth/me");
+                setCurrentUser(response.data);
+            } catch (error) {
+                console.error("Failed to load user:", error);
+            } finally {
+                setLoadingUser(false);
+            }
+        }
 
-    const floors = useMemo(() => {
-        return Array.from(
-            new Set(
-                rooms
-                    .filter((room) => room.block === selectedBlock)
-                    .map((room) => room.floor),
-            ),
-        ).sort((a, b) => a - b);
-    }, [rooms, selectedBlock]);
+        loadUser();
+    }, []);
 
-
-    const apartments = useMemo(() => {
-        return Array.from(
-            new Set(
-                rooms
-                    .filter(
-                        (room) =>
-                            room.block === selectedBlock &&
-                            room.floor === Number(selectedFloor) &&
-                            room.apartment !== null,
-                    )
-                    .map((room) => room.apartment)
-                    .filter(
-                        (apartment): apartment is string =>
-                            apartment !== null,
-                    ),
-            ),
-        ).sort();
-    }, [rooms, selectedBlock, selectedFloor]);
-
-    const availableRooms = useMemo(() => {
-        return rooms
-            .filter(
-                (room) =>
-                    room.block === selectedBlock &&
-                    room.floor === Number(selectedFloor) &&
-                    (room.apartment === null ||
-                        room.apartment === selectedApartment),
-            )
-            .sort((a, b) =>
-                roomNumberSort(a.room_number, b.room_number),
-            );
-    }, [rooms, selectedBlock, selectedFloor, selectedApartment]);
-
-    const selectedRoomData = rooms.find(
-        (room) => room.id === selectedRoom,
-    );
-
-    function handleBlockChange(value: string) {
-        setSelectedBlock(value);
-        setSelectedFloor("");
-        setSelectedApartment("");
-        setSelectedRoom("");
-    }
-
-    function handleFloorChange(value: string) {
-        setSelectedFloor(value);
-        setSelectedApartment("");
-        setSelectedRoom("");
-    }
+    
 
     async function handleSubmit(
         event: FormEvent<HTMLFormElement>,
@@ -128,22 +74,29 @@ export default function NewComplaintPage() {
         setError("");
         setDuplicate(null);
 
-        if (!selectedRoomData) {
-            setError("Please select your room.");
+        if (!currentUser?.room) {
+            setError(
+                "You cannot create a complaint until a room has been assigned to you.",
+            );
             return;
         }
 
         setLoading(true);
 
         try {
-            const response = await api.post("/api/v1/complaints", {
-                title,
-                description,
-                block: selectedRoomData.block,
-                floor: selectedRoomData.floor,
-                room_number: selectedRoomData.room_number,
-                apartment: selectedRoomData.apartment,
-            });
+            const response = await api.post(
+                "/api/v1/complaints",
+                {
+                    title,
+                    description,
+
+                    // Use the room assigned by Admin.
+                    block: currentUser.room.block,
+                    floor: currentUser.room.floor,
+                    room_number: currentUser.room.room_number,
+                    apartment: currentUser.room.apartment,
+                },
+            );
 
             const complaint = response.data;
 
@@ -175,7 +128,7 @@ export default function NewComplaintPage() {
         return (
             <main className="flex min-h-screen items-center justify-center bg-zinc-50">
                 <p className="text-sm text-zinc-500">
-                    Loading room information...
+                    room information...
                 </p>
             </main>
         );
@@ -326,143 +279,44 @@ export default function NewComplaintPage() {
                                 Your room
                             </h3>
 
-                            <div
-                                className={`grid gap-4 ${apartments.length > 0
-                                    ? "sm:grid-cols-4"
-                                    : "sm:grid-cols-3"
-                                    }`}
-                            >
-                                <div>
-                                    <label
-                                        htmlFor="block"
-                                        className="mb-2 block text-sm font-medium text-zinc-700"
-                                    >
-                                        Block
-                                    </label>
-
-                                    <select
-                                        id="block"
-                                        value={selectedBlock}
-                                        onChange={(event) =>
-                                            handleBlockChange(event.target.value)
-                                        }
-                                        required
-                                        className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-sm outline-none focus:border-zinc-900"
-                                    >
-                                        <option value="">
-                                            Select block
-                                        </option>
-
-                                        {blocks.map((block) => (
-                                            <option key={block} value={block}>
-                                                {block}
-                                            </option>
-                                        ))}
-                                    </select>
+                            {loadingUser ? (
+                                <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+                                    <p className="text-sm text-zinc-500">
+                                        Loading your room...
+                                    </p>
                                 </div>
+                            ) : currentUser?.room ? (
+                                <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+                                    <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                                        Assigned room
+                                    </p>
 
-                                {apartments.length > 0 && (
-                                    <div>
-                                        <label
-                                            htmlFor="apartment"
-                                            className="mb-2 block text-sm font-medium text-zinc-700"
-                                        >
-                                            Apartment
-                                        </label>
+                                    <p className="mt-2 font-semibold text-zinc-900">
+                                        Block {currentUser.room.block}
+                                        {" • "}
+                                        Floor {currentUser.room.floor}
+                                        {" • "}
+                                        Room {currentUser.room.room_number}
+                                    </p>
 
-                                        <select
-                                            id="apartment"
-                                            value={selectedApartment}
-                                            onChange={(event) => {
-                                                setSelectedApartment(event.target.value);
-                                                setSelectedRoom("");
-                                            }}
-                                            disabled={!selectedFloor}
-                                            required
-                                            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-sm outline-none disabled:bg-zinc-100 focus:border-zinc-900"
-                                        >
-                                            <option value="">
-                                                Select apartment
-                                            </option>
-
-                                            {apartments.map((apartment) => (
-                                                <option
-                                                    key={apartment}
-                                                    value={apartment}
-                                                >
-                                                    Apartment {apartment}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                )}
-
-                                <div>
-                                    <label
-                                        htmlFor="floor"
-                                        className="mb-2 block text-sm font-medium text-zinc-700"
-                                    >
-                                        Floor
-                                    </label>
-
-                                    <select
-                                        id="floor"
-                                        value={selectedFloor}
-                                        onChange={(event) =>
-                                            handleFloorChange(event.target.value)
-                                        }
-                                        disabled={!selectedBlock}
-                                        required
-                                        className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-sm outline-none disabled:bg-zinc-100 focus:border-zinc-900"
-                                    >
-                                        <option value="">
-                                            Select floor
-                                        </option>
-
-                                        {floors.map((floor) => (
-                                            <option
-                                                key={floor}
-                                                value={floor}
-                                            >
-                                                Floor {floor}
-                                            </option>
-                                        ))}
-                                    </select>
+                                    {currentUser.room.apartment && (
+                                        <p className="mt-1 text-sm text-zinc-500">
+                                            Apartment {currentUser.room.apartment}
+                                        </p>
+                                    )}
                                 </div>
+                            ) : (
+                                <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+                                    <p className="font-medium text-red-700">
+                                        No room assigned
+                                    </p>
 
-                                <div>
-                                    <label
-                                        htmlFor="room"
-                                        className="mb-2 block text-sm font-medium text-zinc-700"
-                                    >
-                                        Room
-                                    </label>
-
-                                    <select
-                                        id="room"
-                                        value={selectedRoom}
-                                        onChange={(event) =>
-                                            setSelectedRoom(event.target.value)
-                                        }
-                                        disabled={!selectedFloor}
-                                        required
-                                        className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-sm outline-none disabled:bg-zinc-100 focus:border-zinc-900"
-                                    >
-                                        <option value="">
-                                            Select room
-                                        </option>
-
-                                        {availableRooms.map((room) => (
-                                            <option
-                                                key={room.id}
-                                                value={room.id}
-                                            >
-                                                Room {room.room_number}
-                                            </option>
-                                        ))}
-                                    </select>
+                                    <p className="mt-1 text-sm text-red-600">
+                                        You have not been assigned a room yet.
+                                        Please contact the administrator.
+                                    </p>
                                 </div>
-                            </div>
+                            )}
                         </div>
 
                         <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
@@ -478,9 +332,10 @@ export default function NewComplaintPage() {
                                 type="submit"
                                 disabled={
                                     loading ||
-                                    !selectedRoomData ||
-                                    (apartments.length > 0 && !selectedApartment)
+                                    loadingUser ||
+                                    !currentUser?.room
                                 }
+
                                 className="rounded-lg bg-zinc-900 px-5 py-3 text-sm font-semibold text-white hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 {loading

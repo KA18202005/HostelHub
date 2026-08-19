@@ -6,6 +6,8 @@ from app.db.database import get_session
 from app.models.hostel import Hostel
 from app.models.user import User
 from app.schemas.hostel import HostelCreate, HostelRead
+from app.enums.roles import UserRole
+from app.api.dependencies import require_role
 
 
 router = APIRouter(
@@ -21,7 +23,9 @@ router = APIRouter(
 )
 def create_hostel(
     hostel_data: HostelCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(
+        require_role(UserRole.ADMIN)
+    ),
     session: Session = Depends(get_session),
 ):
     hostel = Hostel(

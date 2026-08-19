@@ -7,10 +7,10 @@ from app.enums.roles import UserRole
 from app.models.user import User
 from app.schemas.admin import AdminUserRead
 from uuid import UUID
-
+from app.models.room import Room
 from app.schemas.admin import AdminRoleUpdate
 from app.schemas.admin import AdminUserStatusUpdate
-
+from app.schemas.admin import AdminRoomUpdate
 
 router = APIRouter(
     prefix="/api/v1/admin",
@@ -113,6 +113,53 @@ def update_user_role(
 
     return user
 
+
+@router.patch(
+    "/users/{user_id}/room",
+    response_model=AdminUserRead,
+)
+def update_user_room(
+    user_id: UUID,
+    data: AdminRoomUpdate,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=403,
+            detail="Admin access required",
+        )
+
+    user = session.get(User, user_id)
+
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+
+    if user.role != UserRole.STUDENT:
+        raise HTTPException(
+            status_code=400,
+            detail="Only students can be assigned to rooms",
+        )
+
+    if data.room_id is not None:
+        room = session.get(Room, data.room_id)
+
+        if room is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Room not found",
+            )
+
+    user.room_id = data.room_id
+
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+
+    return user
 
 
 

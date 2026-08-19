@@ -4,7 +4,6 @@ from fastapi.responses import FileResponse
 from sqlmodel import Session, select
 
 import shutil
-
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from app.api.dependencies import get_current_user
 from app.db.database import get_session
@@ -20,6 +19,13 @@ router = APIRouter(
     tags=["Attachments"],
 )
 
+ALLOWED_IMAGE_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+}
+
+MAX_FILE_SIZE = 5 * 1024 * 1024
 
 
 UPLOAD_DIR = Path("uploads")
@@ -31,7 +37,7 @@ UPLOAD_DIR = Path("uploads")
     response_model=ComplaintAttachmentRead,
     status_code=201,
 )
-def upload_complaint_attachment(
+async def upload_complaint_attachment(
     complaint_id: UUID,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
@@ -61,7 +67,21 @@ def upload_complaint_attachment(
             status_code=400,
             detail="File name is required",
         )
+    
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Only JPG, PNG, and WEBP images are allowed",
+        )
 
+
+    contents = await file.read()
+
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail="File size must not exceed 5 MB",
+    )
     # Create uploads directory if it doesn't exist.
     UPLOAD_DIR.mkdir(
         parents=True,
@@ -78,11 +98,8 @@ def upload_complaint_attachment(
     file_path = UPLOAD_DIR / stored_filename
 
     with file_path.open("wb") as buffer:
-        shutil.copyfileobj(
-            file.file,
-            buffer,
-        )
-
+        buffer.write(contents)
+        
     file_size = file_path.stat().st_size
 
     attachment = ComplaintAttachment(
@@ -140,16 +157,15 @@ def get_complaint_attachments(
 
 
 
-@router.get(
-    "/file/{stored_filename}",
-)
+@router.get("/file/{stored_filename}")
 def get_attachment_file(
     stored_filename: str,
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
     attachment = session.exec(
-        select(ComplaintAttachment).where(
+        select(ComplaintAttachment)
+        .where(
             ComplaintAttachment.stored_filename == stored_filename
         )
     ).first()
@@ -171,13 +187,15 @@ def get_attachment_file(
             detail="Complaint not found",
         )
 
+    # Students can only access attachments
+    # belonging to their own complaints.
     if (
         current_user.role == UserRole.STUDENT
         and complaint.reported_by_id != current_user.id
     ):
         raise HTTPException(
             status_code=403,
-            detail="You do not have permission to view this attachment",
+            detail="You do not have permission to access this attachment",
         )
 
     file_path = UPLOAD_DIR / attachment.stored_filename
@@ -185,7 +203,7 @@ def get_attachment_file(
     if not file_path.exists():
         raise HTTPException(
             status_code=404,
-            detail="Attachment file not found",
+            detail="Attachment file not found on server",
         )
 
     return FileResponse(
@@ -193,6 +211,3 @@ def get_attachment_file(
         media_type=attachment.content_type,
         filename=attachment.filename,
     )
-   
-   
-   

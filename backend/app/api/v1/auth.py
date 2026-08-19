@@ -14,6 +14,7 @@ from app.db.database import get_session
 from app.enums.roles import UserRole
 from app.models.user import User
 from app.api.dependencies import get_current_user
+from app.models.room import Room
 
 oauth_sessions: Dict[str, str] = {}
 
@@ -178,12 +179,29 @@ async def google_callback(
 @router.get("/me")
 async def get_current_user_info(
     current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
 ):
+    room = None
+
+    if current_user.room_id is not None:
+        room = session.get(Room, current_user.room_id)
+        
     return {
         "id": str(current_user.id),
         "name": current_user.name,
         "email": current_user.email,
         "role": current_user.role.value,
         "is_active": current_user.is_active,
+        "room": (
+            {
+                "id": str(room.id),
+                "block": room.block,
+                "floor": room.floor,
+                "room_number": room.room_number,
+                "apartment": room.apartment,
+            }
+            if room is not None
+            else None
+        ),
     }
     

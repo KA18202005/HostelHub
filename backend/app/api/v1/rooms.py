@@ -12,7 +12,8 @@ from app.schemas.room import (
     RoomRead,
     RoomOptionRead,
 )
-
+from app.enums.roles import UserRole
+from app.api.dependencies import require_role
 
 router = APIRouter(
     prefix="/api/v1/rooms",
@@ -27,7 +28,9 @@ router = APIRouter(
 )
 def create_room(
     room_data: RoomCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(
+        require_role(UserRole.ADMIN)
+    ),
     session: Session = Depends(get_session),
 ):
     hostel = session.get(Hostel, room_data.hostel_id)

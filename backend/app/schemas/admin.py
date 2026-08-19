@@ -6,6 +6,10 @@ from sqlmodel import SQLModel
 from app.enums.roles import UserRole
 
 
+
+class AdminRoomUpdate(SQLModel):
+    room_id: UUID | None = None
+
 class AdminUserRead(SQLModel):
     id: UUID
     name: str

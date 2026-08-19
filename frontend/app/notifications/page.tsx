@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Bell, Check } from "lucide-react";
-
+import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 
 type Notification = {
@@ -15,6 +15,7 @@ type Notification = {
 };
 
 export default function NotificationsPage() {
+    const router = useRouter();
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
@@ -53,9 +54,9 @@ export default function NotificationsPage() {
                 current.map((notification) =>
                     notification.id === notificationId
                         ? {
-                              ...notification,
-                              is_read: true,
-                          }
+                            ...notification,
+                            is_read: true,
+                        }
                         : notification
                 )
             );
@@ -81,10 +82,13 @@ export default function NotificationsPage() {
                         </p>
                     </div>
 
-                    <Bell
-                        size={24}
-                        className="text-zinc-500"
-                    />
+                    <button
+                        type="button"
+                        onClick={() => router.push("/dashboard")}
+                        className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                    >
+                        Back to Dashboard
+                    </button>
                 </div>
 
                 {loading && (
@@ -138,11 +142,10 @@ export default function NotificationsPage() {
                                 (notification) => (
                                     <div
                                         key={notification.id}
-                                        className={`rounded-2xl border bg-white p-5 ${
-                                            notification.is_read
+                                        className={`rounded-2xl border bg-white p-5 ${notification.is_read
                                                 ? "border-zinc-200"
                                                 : "border-blue-200 bg-blue-50/30"
-                                        }`}
+                                            }`}
                                     >
                                         <div className="flex gap-4">
                                             <div className="mt-1">

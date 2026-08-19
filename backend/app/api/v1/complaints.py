@@ -13,7 +13,6 @@ from app.enums.complaint_priority import ComplaintPriority
 from app.services.notification_service import create_notification
 from app.models.complaint_history import ComplaintHistory
 from app.schemas.complaint import ComplaintHistoryRead
-from app.models.complaint_attachment import ComplaintAttachment
 from app.services.complaint_history_service import create_history
 from app.services.staff_assignment_service import get_least_loaded_staff
 from app.services.complaint_priority_service import requires_escalation
@@ -80,31 +79,46 @@ def create_complaint(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-        # Resolve the student's human-readable room details
+    # Resolve the student's human-readable room details
     # into the actual Room UUID stored in the database.
+    
+    if current_user.role == UserRole.STUDENT:
+        if current_user.room_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail="You have not been assigned a room yet",
+            )
 
-    room_query = select(Room).where(
-        Room.block == complaint_data.block.upper(),
-        Room.floor == complaint_data.floor,
-        Room.room_number == complaint_data.room_number,
-    )
+        room = session.get(Room, current_user.room_id)
 
-    if complaint_data.apartment:
-        room_query = room_query.where(
-            Room.apartment == complaint_data.apartment.upper()
-        )
+        if room is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Your assigned room could not be found",
+            )
     else:
-        room_query = room_query.where(
-            Room.apartment == None
+        room_query = select(Room).where(
+            Room.block == complaint_data.block.upper(),
+            Room.floor == complaint_data.floor,
+            Room.room_number == complaint_data.room_number,
         )
 
-    room = session.exec(room_query).first()
+        if complaint_data.apartment:
+            room_query = room_query.where(
+                Room.apartment == complaint_data.apartment.upper()
+            )
+        else:
+            room_query = room_query.where(
+                Room.apartment == None
+            )
 
-    if room is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Room not found for the selected block, floor, apartment and room number.",
-    )
+        room = session.exec(room_query).first()
+
+        if room is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Room not found for the selected block, floor, apartment and room number.",
+        )
 
     duplicate_result = check_for_duplicate_complaint(
         session=session,
@@ -185,6 +199,16 @@ def create_complaint(
     if staff_user is not None:
         complaint.assigned_to_id = staff_user.id
         complaint.status = ComplaintStatus.ASSIGNED
+        
+        create_notification(
+            session=session,
+            user_id=staff_user.id,
+            title="Complaint Assigned to You",
+            message=(
+                f'Complaint "{complaint.title}" '
+                f'has been assigned to you.'
+            ),
+        )
 
         create_history(
             session=session,
@@ -205,6 +229,7 @@ def create_complaint(
                 f"{staff_user.name}."
             ),
         )
+        
 
         if requires_escalation(complaint.priority):
             admin_users = session.exec(
@@ -244,6 +269,8 @@ def create_complaint(
         room_number=room.room_number,
         apartment=room.apartment,
         reported_by_id=complaint.reported_by_id,
+        reported_by_name=current_user.name,
+        reported_by_email=current_user.email,
         assigned_to_id=complaint.assigned_to_id,
     )
 
@@ -289,7 +316,8 @@ def get_my_complaints(
             floor=complaint.room.floor,
             room_number=complaint.room.room_number,
             apartment=complaint.room.apartment,
-
+            reported_by_name=current_user.name,
+            reported_by_email=current_user.email,
             reported_by_id=complaint.reported_by_id,
             assigned_to_id=complaint.assigned_to_id,
         )
@@ -389,6 +417,12 @@ def assign_complaint(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Complaint can only be assigned to staff or admin",
+        )
+    
+    if not staff_user.is_active:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot assign complaint to an inactive user",
         )
 
     complaint.assigned_to_id = staff_user.id
@@ -630,112 +664,6 @@ def get_complaint_history(
     ]
 
 
-
-
-@router.post("/{complaint_id}/attachments")
-async def upload_complaint_attachment(
-    complaint_id: UUID,
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    complaint = session.get(Complaint, complaint_id)
-
-    if complaint is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Complaint not found",
-        )
-
-    # Student can upload only to their own complaint.
-    if (
-        current_user.role == UserRole.STUDENT
-        and complaint.reported_by_id != current_user.id
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="You do not have permission to attach files to this complaint",
-        )
-
-    if file.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail="Only JPG, PNG, and WEBP images are allowed",
-        )
-
-    contents = await file.read()
-
-    if len(contents) > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=400,
-            detail="File size must not exceed 5 MB",
-        )
-
-    extension = Path(file.filename or "").suffix.lower()
-
-    if extension not in {".jpg", ".jpeg", ".png", ".webp"}:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid image extension",
-        )
-
-    stored_filename = f"{uuid.uuid4()}{extension}"
-
-    file_path = UPLOAD_DIR / stored_filename
-
-    with open(file_path, "wb") as buffer:
-        buffer.write(contents)
-
-    attachment = ComplaintAttachment(
-        complaint_id=complaint.id,
-        uploaded_by_id=current_user.id,
-        filename=file.filename or "attachment",
-        stored_filename=stored_filename,
-        content_type=file.content_type,
-        file_size=len(contents),
-    )
-
-    session.add(attachment)
-    session.commit()
-    session.refresh(attachment)
-
-    return attachment
-
-
-@router.get("/{complaint_id}/attachments")
-def get_complaint_attachments(
-    complaint_id: UUID,
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    complaint = session.get(Complaint, complaint_id)
-
-    if complaint is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Complaint not found",
-        )
-
-    if (
-        current_user.role == UserRole.STUDENT
-        and complaint.reported_by_id != current_user.id
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="You do not have permission to view these attachments",
-        )
-
-    statement = (
-        select(ComplaintAttachment)
-        .where(
-            ComplaintAttachment.complaint_id == complaint_id
-        )
-        .order_by(ComplaintAttachment.created_at.asc())
-    )
-
-    return session.exec(statement).all()
-
-
 @router.get(
     "/{complaint_id}",
     response_model=ComplaintRead,
@@ -745,7 +673,14 @@ def get_complaint(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    complaint = session.get(Complaint, complaint_id)
+    complaint = session.exec(
+        select(Complaint)
+        .where(Complaint.id == complaint_id)
+        .options(
+            selectinload(Complaint.room),
+            selectinload(Complaint.reported_by),
+        )
+    ).first()
 
     if complaint is None:
         raise HTTPException(
@@ -753,12 +688,27 @@ def get_complaint(
             detail="Complaint not found",
         )
 
-    room = session.get(Room, complaint.room_id)
+    # Students can only view their own complaints.
+    # Staff/Admin can view any complaint.
+    if (
+        current_user.role == UserRole.STUDENT
+        and complaint.reported_by_id != current_user.id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to view this complaint",
+        )
 
-    if room is None:
+    if complaint.room is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Room associated with complaint not found",
+            detail="Complaint room not found",
+        )
+
+    if complaint.reported_by is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Complaint reporter not found",
         )
 
     return ComplaintRead(
@@ -769,19 +719,22 @@ def get_complaint(
         priority=complaint.priority,
         status=complaint.status,
         ai_reason=complaint.ai_reason,
+
         room_id=complaint.room_id,
-        block=room.block,
-        floor=room.floor,
-        room_number=room.room_number,
-        apartment=room.apartment,
+        block=complaint.room.block,
+        floor=complaint.room.floor,
+        room_number=complaint.room.room_number,
+        apartment=complaint.room.apartment,
+
         reported_by_id=complaint.reported_by_id,
         reported_by_name=complaint.reported_by.name,
         reported_by_email=complaint.reported_by.email,
+
         assigned_to_id=complaint.assigned_to_id,
     )
-
-
-
+    
+    
+    
 
 @router.patch(
     "/{complaint_id}",

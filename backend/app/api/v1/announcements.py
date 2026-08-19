@@ -24,11 +24,6 @@ router = APIRouter(
     response_model=AnnouncementRead,
     status_code=status.HTTP_201_CREATED,
 )
-@router.post(
-    "",
-    response_model=AnnouncementRead,
-    status_code=status.HTTP_201_CREATED,
-)
 def create_announcement(
     announcement_data: AnnouncementCreate,
     current_user: User = Depends(get_current_user),
