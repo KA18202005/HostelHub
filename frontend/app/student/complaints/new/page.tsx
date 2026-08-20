@@ -37,8 +37,8 @@ export default function NewComplaintPage() {
     const [loadingUser, setLoadingUser] = useState(true);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
-    const [duplicate, setDuplicate] =
-        useState<DuplicateDetail | null>(null);
+    const [duplicate, setDuplicate] = useState<DuplicateDetail | null>(null);
+    const [attachment, setAttachment] = useState<File | null>(null);
 
     const {
         data: rooms = [],
@@ -64,15 +64,43 @@ export default function NewComplaintPage() {
         loadUser();
     }, []);
 
-    
+
 
     async function handleSubmit(
         event: FormEvent<HTMLFormElement>,
     ) {
         event.preventDefault();
 
+        if (loading) {
+            return;
+        }
+
         setError("");
         setDuplicate(null);
+
+        if (!title.trim()) {
+            setError("Please enter a complaint title.");
+            return;
+        }
+
+        if (!description.trim()) {
+            setError("Please enter a complaint description.");
+            return;
+        }
+
+        if (title.trim().length < 5) {
+            setError(
+                "Complaint title must be at least 5 characters.",
+            );
+            return;
+        }
+
+        if (description.trim().length < 10) {
+            setError(
+                "Complaint description must be at least 10 characters.",
+            );
+            return;
+        }
 
         if (!currentUser?.room) {
             setError(
@@ -100,9 +128,43 @@ export default function NewComplaintPage() {
 
             const complaint = response.data;
 
+            if (attachment) {
+                try {
+                    const formData = new FormData();
+
+                    formData.append("file", attachment);
+
+                    await api.post(
+                        `/api/v1/attachments/${complaint.id}/attachments`,
+                        formData,
+                        {
+                            headers: {
+                                "Content-Type": "multipart/form-data",
+                            },
+                        },
+                    );
+                } catch (attachmentError: any) {
+                    console.error(
+                        "Attachment upload failed:",
+                        attachmentError,
+                    );
+
+                    setError(
+                        "Complaint was created, but the attachment could not be uploaded. You can upload it from the complaint page.",
+                    );
+
+                    router.push(
+                        `/student/complaints/${complaint.id}`,
+                    );
+
+                    return;
+                }
+            }
+
             router.push(
                 `/student/complaints/${complaint.id}`,
             );
+
         } catch (error: any) {
             if (error?.response?.status === 409) {
                 setDuplicate(error.response.data.detail);
@@ -272,6 +334,73 @@ export default function NewComplaintPage() {
                                 rows={6}
                                 className="w-full resize-none rounded-lg border border-zinc-300 px-4 py-3 text-sm outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
                             />
+                        </div>
+
+                        <div>
+                            <label className="mb-2 block text-sm font-medium text-zinc-700">
+                                Attachment
+                            </label>
+
+                            <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                onChange={(event) => {
+                                    const file = event.target.files?.[0];
+
+                                    if (!file) {
+                                        setAttachment(null);
+                                        return;
+                                    }
+
+                                    const allowedTypes = [
+                                        "image/jpeg",
+                                        "image/png",
+                                        "image/webp",
+                                    ];
+
+                                    if (!allowedTypes.includes(file.type)) {
+                                        setError(
+                                            "Only JPG, PNG, and WEBP images are allowed.",
+                                        );
+                                        setAttachment(null);
+                                        event.target.value = "";
+                                        return;
+                                    }
+
+                                    if (file.size > 5 * 1024 * 1024) {
+                                        setError(
+                                            "Image size must not exceed 5 MB.",
+                                        );
+                                        setAttachment(null);
+                                        event.target.value = "";
+                                        return;
+                                    }
+
+                                    setError("");
+                                    setAttachment(file);
+                                }}
+                                className="block w-full text-sm text-zinc-600"
+                            />
+
+                            {attachment && (
+                                <div className="mt-2 flex items-center justify-between rounded-lg bg-zinc-50 px-3 py-2">
+                                    <p className="truncate text-sm text-zinc-700">
+                                        {attachment.name}
+                                    </p>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setAttachment(null)}
+                                        className="ml-3 text-sm font-medium text-red-600 hover:text-red-700"
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            )}
+
+                            <p className="mt-1 text-xs text-zinc-500">
+                                JPG, PNG, or WEBP. Maximum size: 5 MB.
+                            </p>
                         </div>
 
                         <div className="space-y-4">

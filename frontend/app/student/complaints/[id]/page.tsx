@@ -106,11 +106,22 @@ export default function ComplaintDetailPage() {
     const [editing, setEditing] = useState(false);
     const [saving, setSaving] = useState(false);
     const [editError, setEditError] = useState("");
+    const [originalTitle, setOriginalTitle] = useState("");
+    const [originalDescription, setOriginalDescription] = useState("");
 
     async function handleUpdateComplaint() {
         if (!complaint) {
             return;
         }
+
+        if (
+            complaint.title === originalTitle &&
+            complaint.description === originalDescription
+        ) {
+            setEditing(false);
+            return;
+        }
+
 
         try {
             setSaving(true);
@@ -197,6 +208,28 @@ export default function ComplaintDetailPage() {
         const file = event.target.files?.[0];
 
         if (!file) {
+            return;
+        }
+
+        const allowedTypes = [
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+        ];
+
+        if (!allowedTypes.includes(file.type)) {
+            setUploadError(
+                "Only JPG, PNG, and WEBP images are allowed.",
+            );
+            event.target.value = "";
+            return;
+        }
+
+        if (file.size > 5 * 1024 * 1024) {
+            setUploadError(
+                "Image size must not exceed 5 MB.",
+            );
+            event.target.value = "";
             return;
         }
 
@@ -350,6 +383,8 @@ export default function ComplaintDetailPage() {
                             <button
                                 type="button"
                                 onClick={() => {
+                                    setOriginalTitle(complaint.title);
+                                    setOriginalDescription(complaint.description);
                                     setEditError("");
                                     setEditing(true);
                                 }}
