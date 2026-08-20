@@ -103,6 +103,40 @@ export default function ComplaintDetailPage() {
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+    const [editing, setEditing] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [editError, setEditError] = useState("");
+
+    async function handleUpdateComplaint() {
+        if (!complaint) {
+            return;
+        }
+
+        try {
+            setSaving(true);
+            setEditError("");
+
+            const response = await api.patch(
+                `/api/v1/complaints/${complaintId}`,
+                {
+                    title: complaint.title,
+                    description: complaint.description,
+                },
+            );
+
+            setComplaint(response.data);
+            setEditing(false);
+
+            await loadComplaint();
+        } catch (err: any) {
+            setEditError(
+                err?.response?.data?.detail ||
+                "Unable to update complaint.",
+            );
+        } finally {
+            setSaving(false);
+        }
+    }
 
     async function loadComplaint() {
         try {
@@ -310,9 +344,102 @@ export default function ComplaintDetailPage() {
                         {complaint.title}
                     </h2>
 
-                    <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-zinc-600">
-                        {complaint.description}
-                    </p>
+                    {!editing &&
+                        complaint.status !== "RESOLVED" &&
+                        complaint.status !== "CLOSED" && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setEditError("");
+                                    setEditing(true);
+                                }}
+                                className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+                            >
+                                Edit Complaint
+                            </button>
+                        )}
+
+                    {editing && complaint && (
+                        <div className="mt-6 rounded-2xl border border-zinc-200 bg-white p-6">
+                            <h2 className="text-lg font-semibold text-zinc-900">
+                                Edit Complaint
+                            </h2>
+
+                            <div className="mt-5 space-y-4">
+                                <div>
+                                    <label className="mb-1 block text-sm font-medium text-zinc-700">
+                                        Title
+                                    </label>
+
+                                    <input
+                                        type="text"
+                                        value={complaint.title}
+                                        onChange={(event) =>
+                                            setComplaint({
+                                                ...complaint,
+                                                title: event.target.value,
+                                            })
+                                        }
+                                        className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="mb-1 block text-sm font-medium text-zinc-700">
+                                        Description
+                                    </label>
+
+                                    <textarea
+                                        value={complaint.description}
+                                        onChange={(event) =>
+                                            setComplaint({
+                                                ...complaint,
+                                                description: event.target.value,
+                                            })
+                                        }
+                                        rows={5}
+                                        className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                                    />
+                                </div>
+
+                                <div className="flex gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={handleUpdateComplaint}
+                                        disabled={saving}
+                                        className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+                                    >
+                                        {saving ? "Saving..." : "Save Changes"}
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setEditing(false);
+                                            setEditError("");
+                                            loadComplaint();
+                                        }}
+                                        disabled={saving}
+                                        className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+
+                                {editError && (
+                                    <p className="text-sm text-red-600">
+                                        {editError}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {!editing && (
+                        <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-zinc-600">
+                            {complaint.description}
+                        </p>
+                    )}
 
                     <div className="mt-6 grid gap-4 sm:grid-cols-3">
                         <div>
@@ -378,8 +505,8 @@ export default function ComplaintDetailPage() {
                                     <div className="flex flex-col items-center sm:w-full sm:flex-row">
                                         <div
                                             className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${completed
-                                                    ? "bg-zinc-900 text-white"
-                                                    : "bg-zinc-100 text-zinc-400"
+                                                ? "bg-zinc-900 text-white"
+                                                : "bg-zinc-100 text-zinc-400"
                                                 }`}
                                         >
                                             {item.step}
@@ -388,8 +515,8 @@ export default function ComplaintDetailPage() {
                                         {!isLast && (
                                             <div
                                                 className={`h-8 w-0.5 sm:h-0.5 sm:flex-1 ${item.step < currentStep
-                                                        ? "bg-zinc-900"
-                                                        : "bg-zinc-200"
+                                                    ? "bg-zinc-900"
+                                                    : "bg-zinc-200"
                                                     }`}
                                             />
                                         )}
@@ -397,8 +524,8 @@ export default function ComplaintDetailPage() {
 
                                     <p
                                         className={`mt-2 text-sm font-medium ${completed
-                                                ? "text-zinc-900"
-                                                : "text-zinc-400"
+                                            ? "text-zinc-900"
+                                            : "text-zinc-400"
                                             }`}
                                     >
                                         {item.label}

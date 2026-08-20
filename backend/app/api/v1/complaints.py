@@ -760,16 +760,88 @@ def update_complaint(
             detail="You do not have permission to update this complaint",
         )
 
+    if complaint.status in (
+        ComplaintStatus.RESOLVED,
+        ComplaintStatus.CLOSED,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Resolved or closed complaints cannot be edited",
+        )
+
     update_data = complaint_data.model_dump(
         exclude_unset=True
     )
+    
+    old_values = {
+        field: getattr(complaint, field)
+        for field in update_data
+    }
 
     for field, value in update_data.items():
         setattr(complaint, field, value)
 
+    for field, value in update_data.items():
+        old_value = old_values[field]
+
+        if old_value != value:
+            create_history(
+                session=session,
+                complaint_id=complaint.id,
+                user_id=current_user.id,
+                action=f"UPDATED_{field.upper()}",
+                old_value=(
+                    old_value.value
+                    if hasattr(old_value, "value")
+                    else str(old_value)
+                ),
+                new_value=(
+                    value.value
+                    if hasattr(value, "value")
+                    else str(value)
+                ),
+            )
+            
     session.add(complaint)
     session.commit()
     session.refresh(complaint)
 
-    return complaint
+    # Get room information
+    room = session.get(Room, complaint.room_id)
 
+    if room is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Complaint room not found",
+        )
+
+    # Get reporter information
+    reported_user = session.get(
+        User,
+        complaint.reported_by_id,
+    )
+
+    if reported_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Complaint reporter not found",
+        )
+
+    return ComplaintRead(
+        id=complaint.id,
+        title=complaint.title,
+        description=complaint.description,
+        category=complaint.category,
+        priority=complaint.priority,
+        status=complaint.status,
+        ai_reason=complaint.ai_reason,
+        room_id=complaint.room_id,
+        block=room.block,
+        floor=room.floor,
+        room_number=room.room_number,
+        apartment=room.apartment,
+        reported_by_id=complaint.reported_by_id,
+        reported_by_name=reported_user.name,
+        reported_by_email=reported_user.email,
+        assigned_to_id=complaint.assigned_to_id,
+    )
