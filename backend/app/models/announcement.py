@@ -5,10 +5,14 @@ from sqlmodel import Field, Relationship
 
 from app.models.base import BaseModel
 from app.models.mixins import TimestampMixin
-
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from app.models.announcement_attachment import (
+        AnnouncementAttachment,
+    )
     from app.models.user import User
+
 
 
 class Announcement(BaseModel, TimestampMixin, table=True):
@@ -35,3 +39,5 @@ class Announcement(BaseModel, TimestampMixin, table=True):
     created_by: "User" = Relationship(
         back_populates="announcements"
     )
+    
+    attachments: list["AnnouncementAttachment"] = Relationship()

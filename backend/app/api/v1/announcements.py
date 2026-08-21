@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from uuid import UUID
 
 from app.api.dependencies import get_current_user
 from app.db.database import get_session
@@ -8,9 +9,9 @@ from app.models.room import Room
 from app.models.user import User
 from app.schemas.announcement import AnnouncementCreate, AnnouncementRead
 from app.models.hostel import Hostel
-from app.models.notification import Notification
 from app.services.notification_service import create_notification
 from sqlmodel import Session, or_, select
+
 
 
 router = APIRouter(
@@ -148,3 +149,46 @@ def get_announcements(
     )
 
     return session.exec(statement).all()
+
+
+
+@router.patch(
+    "/{announcement_id}/deactivate",
+    response_model=AnnouncementRead,
+)
+def deactivate_announcement(
+    announcement_id: UUID,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    announcement = session.get(
+        Announcement,
+        announcement_id,
+    )
+
+    if announcement is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Announcement not found",
+        )
+
+    if not announcement.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Announcement is already inactive",
+        )
+
+    announcement.is_active = False
+
+    session.add(announcement)
+    session.commit()
+    session.refresh(announcement)
+
+    return announcement
+

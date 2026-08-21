@@ -168,6 +168,14 @@ export default function StaffPage() {
                             )}
                         </button>
 
+                        <button
+                            type="button"
+                            onClick={() => router.push("/announcements")}
+                            className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
+                        >
+                            Announcements
+                        </button>
+
                         <span className="text-sm font-medium text-zinc-500">
                             Staff Dashboard
                         </span>

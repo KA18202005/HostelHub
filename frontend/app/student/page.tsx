@@ -194,9 +194,16 @@ export default function StudentDashboardPage() {
                             </span>
                         )}
                     </button>
+
+                    <button
+                        type="button"
+                        onClick={() => router.push("/announcements")}
+                        className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
+                    >
+                        Announcements
+                    </button>
                 </div>
             </header>
-
             <div className="mx-auto max-w-7xl px-6 py-10">
                 {/* Welcome */}
                 <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">

@@ -278,6 +278,22 @@ export default function AdminPage() {
                             )}
                         </button>
 
+                        <button
+                            type="button"
+                            onClick={() => router.push("/announcements")}
+                            className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
+                        >
+                            Announcements
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => router.push("/admin/announcements/create")}
+                            className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
+                        >
+                            Create Announcement
+                        </button>
+
                         <span className="text-sm font-medium text-zinc-500">
                             Admin Dashboard
                         </span>

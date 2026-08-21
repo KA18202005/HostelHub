@@ -60,6 +60,7 @@ def create_room(
         room_number=room_data.room_number,
         floor=room_data.floor,
         capacity=room_data.capacity,
+        apartment=room_data.apartment,
         hostel_id=room_data.hostel_id,
     )
 

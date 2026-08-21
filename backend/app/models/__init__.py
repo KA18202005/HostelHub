@@ -6,6 +6,6 @@ from app.models.complaint_image import ComplaintImage
 from app.models.complaint_supporter import ComplaintSupporter
 from app.models.notification import Notification
 from app.models.announcement import Announcement
-
+from app.models.announcement_attachment import AnnouncementAttachment
 from app.models.complaint_history import ComplaintHistory
 from app.models.complaint_attachment import ComplaintAttachment

@@ -399,6 +399,15 @@ def assign_complaint(
             detail="Complaint not found",
         )
 
+    if complaint.status in (
+        ComplaintStatus.RESOLVED,
+        ComplaintStatus.CLOSED,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Resolved or closed complaints cannot be assigned",
+        )
+
     staff_user = session.get(
         User,
         assignment.assigned_to_id,
@@ -418,25 +427,38 @@ def assign_complaint(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Complaint can only be assigned to staff or admin",
         )
-    
+
     if not staff_user.is_active:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot assign complaint to an inactive user",
         )
 
+    old_assigned_to_id = complaint.assigned_to_id
+
     complaint.assigned_to_id = staff_user.id
     complaint.status = ComplaintStatus.ASSIGNED
-    
+
+    action = (
+        "REASSIGNED"
+        if old_assigned_to_id is not None
+        and old_assigned_to_id != staff_user.id
+        else "ASSIGNED"
+    )
+
     create_history(
         session=session,
         complaint_id=complaint.id,
         user_id=current_user.id,
-        action="ASSIGNED",
-        old_value=None,
+        action=action,
+        old_value=(
+            str(old_assigned_to_id)
+            if old_assigned_to_id is not None
+            else None
+        ),
         new_value=str(staff_user.id),
     )
-        
+
     create_notification(
         session=session,
         user_id=complaint.reported_by_id,
@@ -446,7 +468,21 @@ def assign_complaint(
             f"has been assigned to {staff_user.name}."
         ),
     )
-    
+
+    if (
+        old_assigned_to_id is not None
+        and old_assigned_to_id != staff_user.id
+    ):
+        create_notification(
+            session=session,
+            user_id=old_assigned_to_id,
+            title="Complaint Reassigned",
+            message=(
+                f'Complaint "{complaint.title}" '
+                f'has been reassigned to {staff_user.name}.'
+            ),
+        )
+
     create_notification(
         session=session,
         user_id=staff_user.id,
@@ -465,7 +501,7 @@ def assign_complaint(
 
     if room is None:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Complaint room not found",
         )
 
@@ -487,7 +523,6 @@ def assign_complaint(
         reported_by_email=complaint.reported_by.email,
         assigned_to_id=complaint.assigned_to_id,
     )
-
 
 
 
@@ -518,7 +553,10 @@ def update_complaint_status(
     new_status = status_data.status
 
     if new_status == current_status:
-        return complaint
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Complaint is already {current_status.value}",
+        )
     
     if new_status == ComplaintStatus.ASSIGNED:
         if complaint.assigned_to_id is None:
@@ -772,14 +810,92 @@ def update_complaint(
     update_data = complaint_data.model_dump(
         exclude_unset=True
     )
-    
+
+    text_changed = (
+        "title" in update_data
+        or "description" in update_data
+    )
+
     old_values = {
         field: getattr(complaint, field)
         for field in update_data
     }
 
+    if text_changed:
+        old_values["category"] = complaint.category
+        old_values["priority"] = complaint.priority
+        old_values["ai_reason"] = complaint.ai_reason
+
     for field, value in update_data.items():
         setattr(complaint, field, value)
+
+    if text_changed:
+        try:
+            classification = classify_complaint(
+                title=complaint.title,
+                description=complaint.description,
+            )
+
+            complaint.category = classification.category
+            complaint.priority = classification.priority
+            complaint.ai_reason = classification.reason
+
+        except Exception:
+            pass
+
+    # your existing history loop
+    for field, value in update_data.items():
+        old_value = old_values[field]
+
+        if old_value != value:
+            create_history(
+                session=session,
+                complaint_id=complaint.id,
+                user_id=current_user.id,
+                action=f"UPDATED_{field.upper()}",
+                old_value=(
+                    old_value.value
+                    if hasattr(old_value, "value")
+                    else str(old_value)
+                ),
+                new_value=(
+                    value.value
+                    if hasattr(value, "value")
+                    else str(value)
+                ),
+            )
+
+    # AI-generated changes
+    if text_changed:
+        if old_values["category"] != complaint.category:
+            create_history(
+                session=session,
+                complaint_id=complaint.id,
+                user_id=current_user.id,
+                action="UPDATED_CATEGORY",
+                old_value=old_values["category"].value,
+                new_value=complaint.category.value,
+            )
+
+        if old_values["priority"] != complaint.priority:
+            create_history(
+                session=session,
+                complaint_id=complaint.id,
+                user_id=current_user.id,
+                action="UPDATED_PRIORITY",
+                old_value=old_values["priority"].value,
+                new_value=complaint.priority.value,
+            )
+
+        if old_values["ai_reason"] != complaint.ai_reason:
+            create_history(
+                session=session,
+                complaint_id=complaint.id,
+                user_id=current_user.id,
+                action="UPDATED_AI_REASON",
+                old_value=str(old_values["ai_reason"]),
+                new_value=str(complaint.ai_reason),
+            )
 
     for field, value in update_data.items():
         old_value = old_values[field]
