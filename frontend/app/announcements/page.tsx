@@ -4,6 +4,16 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 
+type AnnouncementAttachment = {
+    id: string;
+    announcement_id: string;
+    uploaded_by_id: string;
+    filename: string;
+    stored_filename: string;
+    content_type: string;
+    file_size: number;
+};
+
 type Announcement = {
     id: string;
     title: string;
@@ -12,7 +22,9 @@ type Announcement = {
     created_by_id: string;
     is_active: boolean;
     created_at: string;
+    attachments?: AnnouncementAttachment[];
 };
+
 
 export default function AnnouncementsPage() {
     const router = useRouter();
@@ -30,7 +42,34 @@ export default function AnnouncementsPage() {
                 "/api/v1/announcements"
             );
 
-            setAnnouncements(response.data);
+            const announcementData: Announcement[] = response.data;
+
+            const announcementsWithAttachments = await Promise.all(
+                announcementData.map(async (announcement) => {
+                    try {
+                        const attachmentResponse = await api.get(
+                            `/api/v1/announcement-attachments/${announcement.id}`
+                        );
+
+                        return {
+                            ...announcement,
+                            attachments: attachmentResponse.data,
+                        };
+                    } catch (attachmentError) {
+                        console.error(
+                            `Failed to load attachments for announcement ${announcement.id}:`,
+                            attachmentError
+                        );
+
+                        return {
+                            ...announcement,
+                            attachments: [],
+                        };
+                    }
+                })
+            );
+
+            setAnnouncements(announcementsWithAttachments);
         } catch (error: any) {
             console.error(
                 "Failed to load announcements:",
@@ -55,6 +94,45 @@ export default function AnnouncementsPage() {
     useEffect(() => {
         loadAnnouncements();
     }, []);
+
+    async function openAttachment(
+        storedFilename: string,
+    ) {
+        try {
+            const response = await api.get(
+                `/api/v1/announcement-attachments/file/${storedFilename}`,
+                {
+                    responseType: "blob",
+                },
+            );
+
+            const blobUrl = URL.createObjectURL(
+                response.data,
+            );
+
+            window.open(blobUrl, "_blank");
+
+            setTimeout(() => {
+                URL.revokeObjectURL(blobUrl);
+            }, 60000);
+        } catch (error: any) {
+            console.error(
+                "Failed to open attachment:",
+                error,
+            );
+
+            if (error?.response?.status === 401) {
+                localStorage.removeItem("access_token");
+                router.replace("/login");
+                return;
+            }
+
+            setError(
+                error?.response?.data?.detail ||
+                "Unable to open attachment.",
+            );
+        }
+    }
 
     return (
         <main className="min-h-screen bg-gray-50 p-6">
@@ -123,6 +201,59 @@ export default function AnnouncementsPage() {
                                         <p className="mt-3 whitespace-pre-wrap text-gray-700">
                                             {announcement.message}
                                         </p>
+
+                                        {announcement.attachments &&
+                                            announcement.attachments.length > 0 && (
+                                                <div className="mt-5 space-y-3">
+                                                    <h3 className="text-sm font-semibold text-gray-900">
+                                                        Attachments
+                                                    </h3>
+
+                                                    {announcement.attachments.map(
+                                                        (attachment) => (
+                                                            <div
+                                                                key={attachment.id}
+                                                                className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-4 py-3"
+                                                            >
+                                                                <div className="min-w-0">
+                                                                    <p className="truncate text-sm font-medium text-gray-900">
+                                                                        {attachment.filename}
+                                                                    </p>
+
+                                                                    <p className="mt-1 text-xs text-gray-500">
+                                                                        {attachment.content_type ===
+                                                                            "application/pdf"
+                                                                            ? "PDF"
+                                                                            : "Image"}{" "}
+                                                                        •{" "}
+                                                                        {(
+                                                                            attachment.file_size /
+                                                                            1024 /
+                                                                            1024
+                                                                        ).toFixed(2)}{" "}
+                                                                        MB
+                                                                    </p>
+                                                                </div>
+
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        openAttachment(
+                                                                            attachment.stored_filename,
+                                                                        )
+                                                                    }
+                                                                    className="ml-4 shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                                                                >
+                                                                    {attachment.content_type ===
+                                                                        "application/pdf"
+                                                                        ? "Open PDF"
+                                                                        : "View Image"}
+                                                                </button>
+                                                            </div>
+                                                        )
+                                                    )}
+                                                </div>
+                                            )}
 
                                         <p className="mt-4 text-xs text-gray-500">
                                             {new Date(

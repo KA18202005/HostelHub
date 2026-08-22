@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from app.models.announcement_attachment import (
         AnnouncementAttachment,
     )
+    from app.models.announcement_block import AnnouncementBlock
     from app.models.user import User
 
 
@@ -41,3 +42,7 @@ class Announcement(BaseModel, TimestampMixin, table=True):
     )
     
     attachments: list["AnnouncementAttachment"] = Relationship()
+    
+    blocks: list["AnnouncementBlock"] = Relationship(
+        back_populates="announcement"
+    )

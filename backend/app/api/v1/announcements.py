@@ -8,10 +8,9 @@ from app.models.announcement import Announcement
 from app.models.room import Room
 from app.models.user import User
 from app.schemas.announcement import AnnouncementCreate, AnnouncementRead
-from app.models.hostel import Hostel
 from app.services.notification_service import create_notification
 from sqlmodel import Session, or_, select
-
+from app.models.announcement_block import AnnouncementBlock
 
 
 router = APIRouter(
@@ -39,32 +38,35 @@ def create_announcement(
             detail="Staff or admin access required",
         )
 
-    # If a hostel is specified, verify it exists.
-    if announcement_data.hostel_id is not None:
-        hostel_exists = session.exec(
-            select(Hostel).where(
-                Hostel.id == announcement_data.hostel_id
-            )
-        ).first()
-
-        if hostel_exists is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Hostel not found",
-            )
-
     announcement = Announcement(
         title=announcement_data.title,
         message=announcement_data.message,
-        hostel_id=announcement_data.hostel_id,
+        hostel_id=None,
         created_by_id=current_user.id,
     )
 
     session.add(announcement)
     session.flush()
 
+    # Normalize and remove duplicate/empty blocks.
+    blocks = {
+        block.strip()
+        for block in announcement_data.blocks
+        if block.strip()
+    }
+
+    # Save announcement blocks.
+    for block in blocks:
+        announcement_block = AnnouncementBlock(
+            announcement_id=announcement.id,
+            block=block,
+        )
+
+        session.add(announcement_block)
+
     # Find students who should receive the notification.
-    if announcement.hostel_id is None:
+    if not blocks:
+        # No blocks selected = global announcement.
         students = session.exec(
             select(User).where(
                 User.role == UserRole.STUDENT,
@@ -73,16 +75,18 @@ def create_announcement(
         ).all()
 
     else:
+        # Block-targeted announcement.
         students = session.exec(
             select(User)
             .join(Room, User.room_id == Room.id)
             .where(
                 User.role == UserRole.STUDENT,
                 User.is_active == True,
-                Room.hostel_id == announcement.hostel_id,
+                Room.block.in_(blocks),
             )
         ).all()
 
+    # Create notification for each matching student.
     for student in students:
         create_notification(
             session=session,
@@ -94,8 +98,25 @@ def create_announcement(
     session.commit()
     session.refresh(announcement)
 
-    return announcement
+    saved_blocks = session.exec(
+        select(AnnouncementBlock).where(
+            AnnouncementBlock.announcement_id == announcement.id
+        )
+    ).all()
 
+    return {
+        "id": announcement.id,
+        "title": announcement.title,
+        "message": announcement.message,
+        "hostel_id": announcement.hostel_id,
+        "created_by_id": announcement.created_by_id,
+        "is_active": announcement.is_active,
+        "created_at": announcement.created_at,
+        "blocks": [
+            block.block
+            for block in saved_blocks
+        ],
+    }
 
 
 
@@ -120,35 +141,60 @@ def get_announcements(
             Announcement.created_at.desc()
         )
 
-        return session.exec(statement).all()
+        announcements = session.exec(statement).all()
 
-    # Students see global announcements plus
-    # announcements targeted to their hostel.
-    if current_user.room_id is None:
-        statement = statement.where(
-            Announcement.hostel_id == None
-        )
     else:
-        room = session.get(Room, current_user.room_id)
+        # Students see global announcements plus
+        # announcements targeted to their block.
+        if current_user.room_id is None:
+            statement = statement.where(
+                ~Announcement.blocks.any()
+            )
+        else:
+            room = session.get(Room, current_user.room_id)
 
-        if room is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Student room not found",
+            if room is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Student room not found",
+                )
+
+            statement = statement.where(
+                or_(
+                    ~Announcement.blocks.any(),
+                    Announcement.blocks.any(
+                        AnnouncementBlock.block == room.block
+                    ),
+                )
             )
 
-        statement = statement.where(
-            or_(
-                Announcement.hostel_id == None,
-                Announcement.hostel_id == room.hostel_id,
+        statement = statement.order_by(
+            Announcement.created_at.desc()
+        )
+
+        announcements = session.exec(statement).all()
+
+    # Convert AnnouncementBlock objects into block names.
+    result = []
+
+    for announcement in announcements:
+        result.append(
+            AnnouncementRead(
+                id=announcement.id,
+                title=announcement.title,
+                message=announcement.message,
+                hostel_id=announcement.hostel_id,
+                created_by_id=announcement.created_by_id,
+                is_active=announcement.is_active,
+                created_at=announcement.created_at,
+                blocks=[
+                    block.block
+                    for block in announcement.blocks
+                ],
             )
         )
 
-    statement = statement.order_by(
-        Announcement.created_at.desc()
-    )
-
-    return session.exec(statement).all()
+    return result
 
 
 

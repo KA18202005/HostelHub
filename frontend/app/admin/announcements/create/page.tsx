@@ -9,7 +9,7 @@ export default function CreateAnnouncementPage() {
 
     const [title, setTitle] = useState("");
     const [message, setMessage] = useState("");
-    const [hostelId, setHostelId] = useState("");
+    const [blocks, setBlocks] = useState("");
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
@@ -42,9 +42,10 @@ export default function CreateAnnouncementPage() {
             const response = await api.post("/api/v1/announcements", {
                 title: title.trim(),
                 message: message.trim(),
-                hostel_id: hostelId.trim()
-                    ? hostelId.trim()
-                    : null,
+                blocks: blocks
+                    .split(",")
+                    .map((block) => block.trim())
+                    .filter(Boolean),
             });
 
             const announcementId = response.data.id;
@@ -170,30 +171,27 @@ export default function CreateAnnouncementPage() {
 
                         <div>
                             <label
-                                htmlFor="hostelId"
+                                htmlFor="blocks"
                                 className="mb-2 block text-sm font-semibold text-gray-900"
                             >
-                                Hostel ID
+                                Hostel Blocks
                             </label>
 
                             <input
-                                id="hostelId"
+                                id="blocks"
                                 type="text"
-                                value={hostelId}
+                                value={blocks}
                                 onChange={(event) =>
-                                    setHostelId(
-                                        event.target.value,
-                                    )
+                                    setBlocks(event.target.value)
                                 }
-                                placeholder="Leave empty for all hostels"
+                                placeholder="Example: A, B, C"
                                 className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-gray-500"
                                 disabled={loading}
                             />
 
                             <p className="mt-2 text-xs text-gray-500">
-                                Leave this empty to send the
-                                announcement to students across
-                                all hostels.
+                                Enter one or more hostel blocks separated by commas.
+                                Leave empty to send the announcement to all hostels.
                             </p>
                         </div>
 
@@ -208,7 +206,7 @@ export default function CreateAnnouncementPage() {
                             <input
                                 id="attachment"
                                 type="file"
-                                accept="image/jpeg,image/png,image/webp"
+                                accept="image/jpeg,image/png,image/webp,application/pdf"
                                 onChange={(event) => {
                                     setAttachment(
                                         event.target.files?.[0] ?? null

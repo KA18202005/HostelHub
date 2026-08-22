@@ -7,7 +7,7 @@ from sqlmodel import SQLModel
 class AnnouncementCreate(SQLModel):
     title: str
     message: str
-    hostel_id: UUID | None = None
+    blocks: list[str] = []
 
 
 class AnnouncementRead(SQLModel):
@@ -18,3 +18,4 @@ class AnnouncementRead(SQLModel):
     created_by_id: UUID
     is_active: bool
     created_at: datetime
+    blocks: list[str] = []

@@ -9,3 +9,4 @@ from app.models.announcement import Announcement
 from app.models.announcement_attachment import AnnouncementAttachment
 from app.models.complaint_history import ComplaintHistory
 from app.models.complaint_attachment import ComplaintAttachment
+from app.models.announcement_block import AnnouncementBlock
