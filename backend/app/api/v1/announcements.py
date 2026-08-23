@@ -236,5 +236,19 @@ def deactivate_announcement(
     session.commit()
     session.refresh(announcement)
 
-    return announcement
+    blocks = session.exec(
+        select(AnnouncementBlock).where(
+            AnnouncementBlock.announcement_id == announcement.id
+        )
+    ).all()
 
+    return AnnouncementRead(
+        id=announcement.id,
+        title=announcement.title,
+        message=announcement.message,
+        hostel_id=announcement.hostel_id,
+        created_by_id=announcement.created_by_id,
+        is_active=announcement.is_active,
+        created_at=announcement.created_at,
+        blocks=[block.block for block in blocks],
+    )
