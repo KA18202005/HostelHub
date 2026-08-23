@@ -811,24 +811,76 @@ def update_complaint(
         exclude_unset=True
     )
 
+    if not update_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No changes provided",
+        )
+
     text_changed = (
         "title" in update_data
         or "description" in update_data
     )
 
+    # Store the original values before making any changes.
     old_values = {
-        field: getattr(complaint, field)
-        for field in update_data
+        "title": complaint.title,
+        "description": complaint.description,
+        "category": complaint.category,
+        "priority": complaint.priority,
+        "ai_reason": complaint.ai_reason,
     }
 
+    # ---------------------------------------------------------
+    # 1. Check duplicates when title/description changes
+    # ---------------------------------------------------------
     if text_changed:
-        old_values["category"] = complaint.category
-        old_values["priority"] = complaint.priority
-        old_values["ai_reason"] = complaint.ai_reason
+        new_title = update_data.get(
+            "title",
+            complaint.title,
+        )
 
-    for field, value in update_data.items():
-        setattr(complaint, field, value)
+        new_description = update_data.get(
+            "description",
+            complaint.description,
+        )
 
+        duplicate_result = check_for_duplicate_complaint(
+            session=session,
+            room_id=complaint.room_id,
+            title=new_title,
+            description=new_description,
+            exclude_complaint_id=complaint.id,
+        )
+
+        if duplicate_result.is_duplicate:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": (
+                        "Your edited complaint is similar "
+                        "to an existing active complaint."
+                    ),
+                    "similar_complaint_id": str(
+                        duplicate_result.similar_complaint_id
+                    ),
+                    "confidence": duplicate_result.confidence,
+                    "reason": duplicate_result.reason,
+                },
+            )
+
+    # ---------------------------------------------------------
+    # 2. Apply normal editable fields
+    # ---------------------------------------------------------
+    if "title" in update_data:
+        complaint.title = update_data["title"]
+
+    if "description" in update_data:
+        complaint.description = update_data["description"]
+
+    # ---------------------------------------------------------
+    # 3. Reclassify when text changes
+    # ---------------------------------------------------------
     if text_changed:
         try:
             classification = classify_complaint(
@@ -841,88 +893,62 @@ def update_complaint(
             complaint.ai_reason = classification.reason
 
         except Exception:
+            # Keep the existing classification if AI fails.
             pass
 
-    # your existing history loop
-    for field, value in update_data.items():
+    else:
+        # Category/priority can still be explicitly edited
+        # when title/description were not changed.
+        if "category" in update_data:
+            complaint.category = update_data["category"]
+
+        if "priority" in update_data:
+            complaint.priority = update_data["priority"]
+
+    # ---------------------------------------------------------
+    # 4. Record actual changes exactly once
+    # ---------------------------------------------------------
+    tracked_fields = [
+        "title",
+        "description",
+        "category",
+        "priority",
+        "ai_reason",
+    ]
+
+    for field in tracked_fields:
         old_value = old_values[field]
+        new_value = getattr(complaint, field)
 
-        if old_value != value:
-            create_history(
-                session=session,
-                complaint_id=complaint.id,
-                user_id=current_user.id,
-                action=f"UPDATED_{field.upper()}",
-                old_value=(
-                    old_value.value
-                    if hasattr(old_value, "value")
-                    else str(old_value)
-                ),
-                new_value=(
-                    value.value
-                    if hasattr(value, "value")
-                    else str(value)
-                ),
-            )
+        if old_value == new_value:
+            continue
 
-    # AI-generated changes
-    if text_changed:
-        if old_values["category"] != complaint.category:
-            create_history(
-                session=session,
-                complaint_id=complaint.id,
-                user_id=current_user.id,
-                action="UPDATED_CATEGORY",
-                old_value=old_values["category"].value,
-                new_value=complaint.category.value,
-            )
+        if hasattr(old_value, "value"):
+            old_value = old_value.value
+        elif old_value is not None:
+            old_value = str(old_value)
 
-        if old_values["priority"] != complaint.priority:
-            create_history(
-                session=session,
-                complaint_id=complaint.id,
-                user_id=current_user.id,
-                action="UPDATED_PRIORITY",
-                old_value=old_values["priority"].value,
-                new_value=complaint.priority.value,
-            )
+        if hasattr(new_value, "value"):
+            new_value = new_value.value
+        elif new_value is not None:
+            new_value = str(new_value)
 
-        if old_values["ai_reason"] != complaint.ai_reason:
-            create_history(
-                session=session,
-                complaint_id=complaint.id,
-                user_id=current_user.id,
-                action="UPDATED_AI_REASON",
-                old_value=str(old_values["ai_reason"]),
-                new_value=str(complaint.ai_reason),
-            )
+        create_history(
+            session=session,
+            complaint_id=complaint.id,
+            user_id=current_user.id,
+            action=f"UPDATED_{field.upper()}",
+            old_value=old_value,
+            new_value=new_value,
+        )
 
-    for field, value in update_data.items():
-        old_value = old_values[field]
-
-        if old_value != value:
-            create_history(
-                session=session,
-                complaint_id=complaint.id,
-                user_id=current_user.id,
-                action=f"UPDATED_{field.upper()}",
-                old_value=(
-                    old_value.value
-                    if hasattr(old_value, "value")
-                    else str(old_value)
-                ),
-                new_value=(
-                    value.value
-                    if hasattr(value, "value")
-                    else str(value)
-                ),
-            )
-            
     session.add(complaint)
     session.commit()
     session.refresh(complaint)
 
-    # Get room information
+    # ---------------------------------------------------------
+    # 5. Build response
+    # ---------------------------------------------------------
     room = session.get(Room, complaint.room_id)
 
     if room is None:
@@ -931,7 +957,6 @@ def update_complaint(
             detail="Complaint room not found",
         )
 
-    # Get reporter information
     reported_user = session.get(
         User,
         complaint.reported_by_id,

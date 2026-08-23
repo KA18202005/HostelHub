@@ -13,6 +13,16 @@ type AdminUser = {
     email: string;
     role: string;
     is_active: boolean;
+    room_id: string | null;
+};
+
+type RoomOption = {
+    id: string;
+    block: string;
+    floor: number;
+    apartment: string | null;
+    room_number: string;
+    capacity: number;
 };
 
 type AdminDashboard = {
@@ -36,6 +46,14 @@ type Notification = {
     user_id: string;
     created_at: string;
 };
+
+async function getRoomOptions(): Promise<RoomOption[]> {
+    const response = await api.get(
+        "/api/v1/rooms/options"
+    );
+
+    return response.data;
+}
 
 async function getAdminUsers(): Promise<AdminUser[]> {
     const response = await api.get(
@@ -99,6 +117,10 @@ export default function AdminPage() {
         null
     );
 
+    const [updatingRoom, setUpdatingRoom] = useState<string | null>(
+        null
+    );
+
     const [roleFilter, setRoleFilter] = useState("ALL");
     const [statusFilter, setStatusFilter] = useState("ALL");
 
@@ -154,6 +176,31 @@ export default function AdminPage() {
         }
     }
 
+    async function updateUserRoom(
+        userId: string,
+        roomId: string | null
+    ) {
+        try {
+            setUpdatingRoom(userId);
+
+            await api.patch(
+                `/api/v1/admin/users/${userId}/room`,
+                {
+                    room_id: roomId || null,
+                }
+            );
+
+            window.location.reload();
+        } catch (error) {
+            console.error(
+                "Failed to update user room:",
+                error
+            );
+        } finally {
+            setUpdatingRoom(null);
+        }
+    }
+
     const {
         data: users = [],
         isLoading,
@@ -161,6 +208,15 @@ export default function AdminPage() {
     } = useQuery({
         queryKey: ["admin-users"],
         queryFn: getAdminUsers,
+    });
+
+
+    const {
+        data: roomOptions = [],
+        isLoading: isRoomOptionsLoading,
+    } = useQuery({
+        queryKey: ["room-options"],
+        queryFn: getRoomOptions,
     });
 
     const {
@@ -512,6 +568,10 @@ export default function AdminPage() {
                                         </th>
 
                                         <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                                            Room
+                                        </th>
+
+                                        <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-zinc-500">
                                             Status
                                         </th>
                                     </tr>
@@ -555,6 +615,45 @@ export default function AdminPage() {
                                                         ADMIN
                                                     </option>
                                                 </select>
+                                            </td>
+
+                                            <td className="px-6 py-4">
+                                                {user.role === "STUDENT" ? (
+                                                    <select
+                                                        value={user.room_id ?? ""}
+                                                        disabled={
+                                                            updatingRoom === user.id ||
+                                                            isRoomOptionsLoading
+                                                        }
+                                                        onChange={(event) =>
+                                                            updateUserRoom(
+                                                                user.id,
+                                                                event.target.value || null
+                                                            )
+                                                        }
+                                                        className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 outline-none focus:border-zinc-400 disabled:opacity-50"
+                                                    >
+                                                        <option value="">
+                                                            Unassigned
+                                                        </option>
+
+                                                        {roomOptions.map((room) => (
+                                                            <option
+                                                                key={room.id}
+                                                                value={room.id}
+                                                            >
+                                                                {room.block} - {room.room_number}
+                                                                {room.apartment
+                                                                    ? ` (${room.apartment})`
+                                                                    : ""}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                ) : (
+                                                    <span className="text-sm text-zinc-400">
+                                                        —
+                                                    </span>
+                                                )}
                                             </td>
 
                                             <td className="px-6 py-4">

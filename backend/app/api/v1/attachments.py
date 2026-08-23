@@ -1,8 +1,9 @@
 from pathlib import Path
 from uuid import UUID, uuid4
+from app.schemas import attachment
 from fastapi.responses import FileResponse
 from sqlmodel import Session, select
-
+from app.core.config import settings
 import shutil
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from app.api.dependencies import get_current_user
@@ -12,6 +13,8 @@ from app.models.complaint import Complaint
 from app.models.complaint_attachment import ComplaintAttachment
 from app.schemas.attachment import ComplaintAttachmentRead
 from app.models.user import User
+from PIL import Image, UnidentifiedImageError
+from io import BytesIO
 
 
 router = APIRouter(
@@ -27,8 +30,13 @@ ALLOWED_IMAGE_TYPES = {
 
 MAX_FILE_SIZE = 5 * 1024 * 1024
 
+EXPECTED_FORMATS = {
+    "image/jpeg": "JPEG",
+    "image/png": "PNG",
+    "image/webp": "WEBP",
+}
 
-UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR = Path(settings.UPLOAD_DIR)
 
 
 
@@ -76,12 +84,31 @@ async def upload_complaint_attachment(
 
 
     contents = await file.read()
+    
 
     if len(contents) > MAX_FILE_SIZE:
         raise HTTPException(
             status_code=400,
             detail="File size must not exceed 5 MB",
     )
+        
+    try:
+        image = Image.open(BytesIO(contents))
+        image.verify()
+
+        actual_format = image.format
+
+        if actual_format != EXPECTED_FORMATS[file.content_type]:
+            raise HTTPException(
+                status_code=400,
+                detail="File content does not match its declared image type",
+            )
+
+    except (UnidentifiedImageError, OSError):
+        raise HTTPException(
+            status_code=400,
+            detail="Uploaded file is not a valid image",
+        )
     # Create uploads directory if it doesn't exist.
     UPLOAD_DIR.mkdir(
         parents=True,
@@ -89,31 +116,38 @@ async def upload_complaint_attachment(
     )
 
     # Generate a unique stored filename.
-    safe_filename = Path(file.filename).name
+    extension = Path(file.filename).suffix.lower()
 
-    stored_filename = (
-        f"{complaint_id}_{uuid4().hex}_{safe_filename}"
-    )
+    stored_filename = f"{uuid4().hex}{extension}"
 
     file_path = UPLOAD_DIR / stored_filename
 
-    with file_path.open("wb") as buffer:
+    with file_path.open("xb") as buffer:
         buffer.write(contents)
-        
+
     file_size = file_path.stat().st_size
 
-    attachment = ComplaintAttachment(
-        complaint_id=complaint_id,
-        uploaded_by_id=current_user.id,
-        filename=file.filename,
-        stored_filename=stored_filename,
-        content_type=file.content_type or "application/octet-stream",
-        file_size=file_size,
-    )
+    try:
+        attachment = ComplaintAttachment(
+            complaint_id=complaint_id,
+            uploaded_by_id=current_user.id,
+            filename=file.filename,
+            stored_filename=stored_filename,
+            content_type=file.content_type or "application/octet-stream",
+            file_size=file_size,
+        )
 
-    session.add(attachment)
-    session.commit()
-    session.refresh(attachment)
+        session.add(attachment)
+        session.commit()
+        session.refresh(attachment)
+
+    except Exception:
+        session.rollback()
+
+        if file_path.exists():
+            file_path.unlink()
+
+        raise
 
     return attachment
 

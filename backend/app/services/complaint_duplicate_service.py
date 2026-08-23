@@ -17,6 +17,7 @@ ACTIVE_STATUSES = {
 def get_active_complaints_for_room(
     session: Session,
     room_id: UUID,
+    exclude_complaint_id: UUID | None = None,
 ) -> list[Complaint]:
     statement = (
         select(Complaint)
@@ -27,8 +28,12 @@ def get_active_complaints_for_room(
         .order_by(Complaint.created_at.desc())
     )
 
-    return list(session.exec(statement).all())
+    if exclude_complaint_id is not None:
+        statement = statement.where(
+            Complaint.id != exclude_complaint_id
+        )
 
+    return list(session.exec(statement).all())
 
 
 
@@ -37,10 +42,12 @@ def check_for_duplicate_complaint(
     room_id: UUID,
     title: str,
     description: str,
+    exclude_complaint_id: UUID | None = None,
 ):
     complaints = get_active_complaints_for_room(
         session=session,
         room_id=room_id,
+        exclude_complaint_id=exclude_complaint_id,
     )
 
     existing_complaints = [

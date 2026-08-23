@@ -11,6 +11,8 @@ from app.models.room import Room
 from app.schemas.admin import AdminRoleUpdate
 from app.schemas.admin import AdminUserStatusUpdate
 from app.schemas.admin import AdminRoomUpdate
+from app.services.notification_service import create_notification
+
 
 router = APIRouter(
     prefix="/api/v1/admin",
@@ -144,18 +146,72 @@ def update_user_room(
             detail="Only students can be assigned to rooms",
         )
 
-    if data.room_id is not None:
-        room = session.get(Room, data.room_id)
+    old_room_id = user.room_id
 
-        if room is None:
-            raise HTTPException(
-                status_code=404,
-                detail="Room not found",
-            )
+    # Same room: nothing changed, so don't create a notification.
+    if old_room_id == data.room_id:
+        return user
 
-    user.room_id = data.room_id
+    # Unassign student from their current room.
+    if data.room_id is None:
+        user.room_id = None
+
+        session.add(user)
+
+        create_notification(
+            session=session,
+            user_id=user.id,
+            title="Room Assignment Updated",
+            message="Your room assignment has been removed.",
+        )
+
+        session.commit()
+        session.refresh(user)
+
+        return user
+
+    # Get the new room.
+    room = session.get(Room, data.room_id)
+
+    if room is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Room not found",
+        )
+
+    # Check room capacity.
+    current_student_count = session.exec(
+        select(User).where(
+            User.room_id == room.id,
+            User.role == UserRole.STUDENT,
+            User.is_active == True,
+        )
+    ).all()
+
+    if len(current_student_count) >= room.capacity:
+        raise HTTPException(
+            status_code=409,
+            detail="Room is already at full capacity",
+        )
+
+    # Assign new room.
+    user.room_id = room.id
 
     session.add(user)
+
+    # Notify student about the new room.
+    room_name = f"{room.block} - {room.room_number}"
+
+    if room.apartment:
+        room_name += f" ({room.apartment})"
+
+    create_notification(
+        session=session,
+        user_id=user.id,
+        title="Room Assignment Updated",
+        message=f"Your room has been changed to {room_name}.",
+    )
+
     session.commit()
     session.refresh(user)
 
