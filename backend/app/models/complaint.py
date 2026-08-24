@@ -67,10 +67,6 @@ class Complaint(BaseModel, TimestampMixin, table=True):
         }
     )
     
-    images: list["ComplaintImage"] = Relationship(
-        back_populates="complaint"
-    )
-    
     supporters: list["ComplaintSupporter"] = Relationship(
         back_populates="complaint"
     )

@@ -114,14 +114,36 @@ export default function ComplaintDetailPage() {
             return;
         }
 
+        const title = complaint.title.trim();
+        const description = complaint.description.trim();
+
+        if (!title) {
+            setEditError("Title is required.");
+            return;
+        }
+
+        if (title.length > 200) {
+            setEditError("Title must not exceed 200 characters.");
+            return;
+        }
+
+        if (!description) {
+            setEditError("Description is required.");
+            return;
+        }
+
+        if (description.length < 10) {
+            setEditError("Description must be at least 10 characters.");
+            return;
+        }
+
         if (
-            complaint.title === originalTitle &&
-            complaint.description === originalDescription
+            title === originalTitle.trim() &&
+            description === originalDescription.trim()
         ) {
             setEditing(false);
             return;
         }
-
 
         try {
             setSaving(true);
@@ -130,8 +152,8 @@ export default function ComplaintDetailPage() {
             const response = await api.patch(
                 `/api/v1/complaints/${complaintId}`,
                 {
-                    title: complaint.title,
-                    description: complaint.description,
+                    title,
+                    description,
                 },
             );
 
@@ -192,6 +214,13 @@ export default function ComplaintDetailPage() {
         }
 
         loadComplaint();
+    }, [complaintId]);
+
+
+    useEffect(() => {
+        if (!complaintId || editing) {
+            return;
+        }
 
         const interval = setInterval(() => {
             loadComplaint();
@@ -200,7 +229,7 @@ export default function ComplaintDetailPage() {
         return () => {
             clearInterval(interval);
         };
-    }, [complaintId]);
+    }, [complaintId, editing]);
 
     async function handleUpload(
         event: React.ChangeEvent<HTMLInputElement>,

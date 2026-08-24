@@ -1,21 +1,30 @@
 import os
 import secrets
 from typing import Dict
-from httpcore import request
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from google_auth_oauthlib.flow import Flow
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from sqlmodel import Session, select
-from app.core.security import create_access_token
+from app.core.security import (
+    create_access_token,
+    create_oauth_exchange_token,
+    decode_oauth_exchange_token,
+)
 from app.core.config import settings
 from app.db.database import get_session
 from app.enums.roles import UserRole
 from app.models.user import User
 from app.api.dependencies import get_current_user
 from app.models.room import Room
+from pydantic import BaseModel
 
+
+class OAuthExchangeRequest(BaseModel):
+    code: str
+    
+    
 oauth_sessions: Dict[str, str] = {}
 
 
@@ -74,8 +83,6 @@ async def google_login(request: Request):
 
     oauth_sessions[state] = flow.code_verifier
 
-    print("LOGIN STATE:", state)
-    print("LOGIN VERIFIER:", flow.code_verifier)
 
     return RedirectResponse(
         authorization_url
@@ -102,9 +109,6 @@ async def google_callback(
             status_code=400,
             detail="OAuth session expired or invalid. Please restart Google login.",
         )
-
-    print("CALLBACK STATE:", state)
-    print("CALLBACK VERIFIER:", code_verifier)
 
     flow = create_google_flow()
 
@@ -164,17 +168,48 @@ async def google_callback(
 
     # 10. Temporary response
     access_token = create_access_token(
-    user_id=str(user.id),
-    role=user.role.value,
-)
+        user_id=str(user.id),
+        role=user.role.value,
+    )
 
-    frontend_url = "http://localhost:3000"
+    exchange_token = create_oauth_exchange_token(
+        access_token
+    )
+
+    frontend_url = settings.FRONTEND_URL
 
     response = RedirectResponse(
-        url=f"{frontend_url}/auth/callback?access_token={access_token}"
+        url=f"{frontend_url}/auth/callback?code={exchange_token}"
     )
 
     return response
+
+
+
+@router.post("/exchange")
+async def exchange_oauth_code(
+    data: OAuthExchangeRequest,
+):
+    payload = decode_oauth_exchange_token(data.code)
+
+    if payload is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired OAuth exchange code",
+        )
+
+    access_token = payload.get("access_token")
+
+    if not access_token:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid OAuth exchange code",
+        )
+
+    return {
+        "access_token": access_token,
+    }
+
     
 @router.get("/me")
 async def get_current_user_info(

@@ -112,8 +112,8 @@ def update_user_role(
     session.add(user)
     session.commit()
     session.refresh(user)
-
-    return user
+ 
+    return user 
 
 
 @router.patch(
@@ -219,6 +219,7 @@ def update_user_room(
 
 
 
+
 @router.patch(
     "/users/{user_id}/status",
     response_model=AdminUserRead,
@@ -243,11 +244,31 @@ def update_user_status(
             detail="User not found",
         )
 
+    # An admin cannot deactivate their own account.
     if user.id == current_user.id and not data.is_active:
         raise HTTPException(
             status_code=400,
             detail="You cannot deactivate your own account",
         )
+
+    # Prevent the last active admin from being deactivated.
+    if (
+        user.role == UserRole.ADMIN
+        and user.is_active
+        and not data.is_active
+    ):
+        active_admin_count = session.exec(
+            select(User).where(
+                User.role == UserRole.ADMIN,
+                User.is_active == True,
+            )
+        ).all()
+
+        if len(active_admin_count) <= 1:
+            raise HTTPException(
+                status_code=400,
+                detail="You cannot deactivate the last active admin",
+            )
 
     user.is_active = data.is_active
 

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Bell } from "lucide-react";
-
+import { logout } from "@/lib/auth";
 import api from "@/lib/api";
 
 type AdminUser = {
@@ -334,6 +334,8 @@ export default function AdminPage() {
                             )}
                         </button>
 
+
+
                         <button
                             type="button"
                             onClick={() => router.push("/admin/announcements")}
@@ -348,6 +350,14 @@ export default function AdminPage() {
                             className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
                         >
                             Create Announcement
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={logout}
+                            className="rounded-lg border border-gray-200 bg-red-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-600"
+                        >   
+                            Logout
                         </button>
 
                         <span className="text-sm font-medium text-zinc-500">

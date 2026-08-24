@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
+import { logout } from "@/lib/auth";
 
 type ComplaintStatus =
     | "OPEN"
@@ -201,6 +202,14 @@ export default function StudentDashboardPage() {
                         className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
                     >
                         Announcements
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={logout}
+                        className="rounded-lg border border-gray-200 bg-red-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-600"
+                    >
+                        Logout
                     </button>
                 </div>
             </header>

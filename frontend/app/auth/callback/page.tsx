@@ -23,40 +23,65 @@ export default function AuthCallbackPage() {
           window.location.search,
         );
 
-        const token = params.get("access_token");
+        const code = params.get("code");
 
-        if (!token) {
+        if (!code) {
           // The callback may have been opened again
-          // after the token was already processed.
+          // after the OAuth code was already processed.
           const existingToken =
             localStorage.getItem("access_token");
 
           if (existingToken) {
-            const response = await api.get("/api/v1/auth/me");
+            const response = await api.get(
+              "/api/v1/auth/me",
+            );
 
             redirectByRole(response.data.role);
             return;
           }
 
+          throw new Error("OAuth code missing.");
+        }
+
+        const response = await api.post(
+          "/api/v1/auth/exchange",
+          {
+            code,
+          },
+        );
+
+        const token = response.data.access_token;
+
+        if (!token) {
           throw new Error("Access token missing.");
         }
 
-        localStorage.setItem("access_token", token);
+        localStorage.setItem(
+          "access_token",
+          token,
+        );
 
-        // Remove token from browser URL.
+        // Remove the OAuth code from the browser URL.
         window.history.replaceState(
           null,
           "",
           "/auth/callback",
         );
 
-        const response = await api.get("/api/v1/auth/me");
+        const userResponse = await api.get(
+          "/api/v1/auth/me",
+        );
 
-        redirectByRole(response.data.role);
+        redirectByRole(userResponse.data.role);
       } catch (error) {
-        console.error("Authentication failed:", error);
+        console.error(
+          "Authentication failed:",
+          error,
+        );
 
-        localStorage.removeItem("access_token");
+        localStorage.removeItem(
+          "access_token",
+        );
 
         setError(
           "Unable to complete Google sign-in. Please try again.",
