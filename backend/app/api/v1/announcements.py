@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from uuid import UUID
 
 from app.api.dependencies import get_current_user
@@ -125,9 +125,13 @@ def create_announcement(
     response_model=list[AnnouncementRead],
 )
 def get_announcements(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
+    offset = (page - 1) * limit
+
     statement = select(Announcement).where(
         Announcement.is_active == True
     )
@@ -140,8 +144,6 @@ def get_announcements(
         statement = statement.order_by(
             Announcement.created_at.desc()
         )
-
-        announcements = session.exec(statement).all()
 
     else:
         # Students see global announcements plus
@@ -172,7 +174,14 @@ def get_announcements(
             Announcement.created_at.desc()
         )
 
-        announcements = session.exec(statement).all()
+    # Apply pagination after all filtering.
+    statement = (
+        statement
+        .offset(offset)
+        .limit(limit)
+    )
+
+    announcements = session.exec(statement).all()
 
     # Convert AnnouncementBlock objects into block names.
     result = []

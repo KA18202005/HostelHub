@@ -95,7 +95,7 @@ export default function CreateAnnouncementPage() {
                     <button
                         type="button"
                         onClick={() =>
-                            router.push("/announcements")
+                            router.push("/admin/announcements")
                         }
                         className="mb-4 text-sm font-medium text-gray-600 hover:text-gray-900"
                     >

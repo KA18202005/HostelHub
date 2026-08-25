@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from app.api.dependencies import get_current_user
 from app.db.database import get_session
 from app.models.complaint import Complaint
@@ -29,11 +29,7 @@ from app.schemas.complaint import (
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 from uuid import UUID
-import os
-import uuid
 from pathlib import Path
-
-from fastapi import File, UploadFile
 
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -251,7 +247,6 @@ def create_complaint(
                     ),
                 )
 
-    session.add(complaint)
     session.commit()
     session.refresh(complaint)
 
@@ -282,9 +277,13 @@ def create_complaint(
     response_model=list[ComplaintRead],
 )
 def get_my_complaints(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
+    offset = (page - 1) * limit
+
     statement = (
         select(Complaint)
         .where(
@@ -296,6 +295,8 @@ def get_my_complaints(
         .order_by(
             Complaint.created_at.desc()
         )
+        .offset(offset)
+        .limit(limit)
     )
 
     complaints = session.exec(statement).all()
@@ -309,9 +310,7 @@ def get_my_complaints(
             priority=complaint.priority,
             status=complaint.status,
             ai_reason=complaint.ai_reason,
-
             room_id=complaint.room_id,
-
             block=complaint.room.block,
             floor=complaint.room.floor,
             room_number=complaint.room.room_number,
@@ -330,6 +329,8 @@ def get_my_complaints(
     response_model=list[ComplaintRead],
 )
 def get_all_complaints(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
     current_user: User = Depends(
         require_role(
             UserRole.STAFF,
@@ -338,6 +339,8 @@ def get_all_complaints(
     ),
     session: Session = Depends(get_session),
 ):
+    offset = (page - 1) * limit
+
     statement = (
         select(Complaint)
         .options(
@@ -347,6 +350,8 @@ def get_all_complaints(
         .order_by(
             Complaint.created_at.desc()
         )
+        .offset(offset)
+        .limit(limit)
     )
 
     complaints = session.exec(statement).all()
@@ -360,13 +365,11 @@ def get_all_complaints(
             priority=complaint.priority,
             status=complaint.status,
             ai_reason=complaint.ai_reason,
-
             room_id=complaint.room_id,
             block=complaint.room.block,
             floor=complaint.room.floor,
             room_number=complaint.room.room_number,
             apartment=complaint.room.apartment,
-
             reported_by_id=complaint.reported_by_id,
             reported_by_name=complaint.reported_by.name,
             reported_by_email=complaint.reported_by.email,

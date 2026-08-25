@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 
 from app.api.dependencies import get_current_user
@@ -25,6 +25,8 @@ router = APIRouter(
     response_model=list[AdminUserRead],
 )
 def get_users(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
@@ -34,13 +36,16 @@ def get_users(
             detail="Admin access required",
         )
 
+    offset = (page - 1) * limit
+
     statement = (
         select(User)
         .order_by(User.created_at.desc())
+        .offset(offset)
+        .limit(limit)
     )
 
     return session.exec(statement).all()
-
 
 
 @router.get(
@@ -48,6 +53,8 @@ def get_users(
     response_model=list[AdminUserRead],
 )
 def get_staff_users(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
@@ -59,6 +66,8 @@ def get_staff_users(
             status_code=403,
             detail="Staff or admin access required",
         )
+
+    offset = (page - 1) * limit
 
     statement = (
         select(User)
@@ -72,6 +81,8 @@ def get_staff_users(
             User.is_active == True,
         )
         .order_by(User.name.asc())
+        .offset(offset)
+        .limit(limit)
     )
 
     return session.exec(statement).all()

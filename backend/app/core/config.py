@@ -14,6 +14,9 @@ class Settings(BaseSettings):
 
     AUTH_SESSION_SECRET: str
 
+    OAUTHLIB_INSECURE_TRANSPORT: str = "0"
+    OAUTHLIB_RELAX_TOKEN_SCOPE: str = "0"
+
     JWT_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
@@ -25,8 +28,7 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000"
     )
 
-    OAUTHLIB_INSECURE_TRANSPORT: str = "0"
-    OAUTHLIB_RELAX_TOKEN_SCOPE: str = "0"
+    SQL_ECHO: bool = False
 
     UPLOAD_DIR: str = "uploads"
 

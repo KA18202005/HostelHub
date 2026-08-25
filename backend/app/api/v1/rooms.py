@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlmodel import Session, select
 from uuid import UUID
 
@@ -75,9 +75,13 @@ def create_room(
     response_model=list[RoomOptionRead],
 )
 def get_room_options(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
+    offset = (page - 1) * limit
+
     statement = (
         select(Room)
         .order_by(
@@ -86,6 +90,8 @@ def get_room_options(
             Room.apartment,
             Room.room_number,
         )
+        .offset(offset)
+        .limit(limit)
     )
 
     rooms = session.exec(statement).all()
@@ -128,17 +134,23 @@ def get_room(
     response_model=list[RoomRead],
 )
 def get_rooms(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    rooms = session.exec(
-        select(Room).order_by(
+    offset = (page - 1) * limit
+
+    statement = (
+        select(Room)
+        .order_by(
             Room.block,
             Room.floor,
             Room.room_number,
         )
-    ).all()
+        .offset(offset)
+        .limit(limit)
+    )
 
-    return rooms
-
+    return session.exec(statement).all()
 

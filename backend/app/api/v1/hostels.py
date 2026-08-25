@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, Query
 from sqlmodel import Session, select
 
 from app.api.dependencies import get_current_user
@@ -45,9 +45,17 @@ def create_hostel(
     response_model=list[HostelRead],
 )
 def get_hostels(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    return session.exec(
+    offset = (page - 1) * limit
+
+    statement = (
         select(Hostel)
-    ).all()
+        .offset(offset)
+        .limit(limit)
+    )
+
+    return session.exec(statement).all()
