@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware.cors import CORSMiddleware
-
+from fastapi.staticfiles import StaticFiles
 from app.api.v1.auth import router as auth_router
 from app.core.config import settings
 from app.api.v1.complaints import router as complaints_router
@@ -17,6 +17,11 @@ from app.api.v1.announcement_attachments import (
 )
 app = FastAPI(title="HostelHub API")
 
+app.mount(
+    "/uploads",
+    StaticFiles(directory="uploads"),
+    name="uploads",
+)
 
 app.add_middleware(
     SessionMiddleware,

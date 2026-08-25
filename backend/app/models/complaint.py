@@ -12,7 +12,6 @@ from app.models.mixins import TimestampMixin
 if TYPE_CHECKING:
     from app.models.room import Room
     from app.models.user import User
-    from app.models.complaint_image import ComplaintImage
     from app.models.complaint_supporter import ComplaintSupporter
 
 
@@ -33,6 +32,10 @@ class Complaint(BaseModel, TimestampMixin, table=True):
     priority: ComplaintPriority = ComplaintPriority.MEDIUM
 
     status: ComplaintStatus = ComplaintStatus.OPEN
+    
+    attachment_url: str | None = None
+    
+    attachment_name: str | None = None
     
     ai_reason: str | None = None
 

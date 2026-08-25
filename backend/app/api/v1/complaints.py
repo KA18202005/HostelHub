@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status, Query
 from app.api.dependencies import get_current_user
 from app.db.database import get_session
 from app.models.complaint import Complaint
@@ -703,6 +703,76 @@ def get_complaint_history(
         )
         for history, user in results
     ]
+    
+    
+    
+@router.post(
+    "/{complaint_id}/attachment",
+)
+async def upload_complaint_attachment(
+    complaint_id: UUID,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    complaint = session.get(Complaint, complaint_id)
+
+    if complaint is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Complaint not found",
+        )
+
+    if complaint.reported_by_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to update this complaint",
+        )
+
+    if complaint.status in (
+        ComplaintStatus.RESOLVED,
+        ComplaintStatus.CLOSED,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Resolved or closed complaints cannot be edited",
+        )
+
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only JPEG, PNG and WebP images are allowed",
+        )
+
+    file_content = await file.read()
+
+    if len(file_content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File size must not exceed 5 MB",
+        )
+
+    extension = Path(file.filename or "").suffix.lower()
+
+    filename = f"{uuid.uuid4()}{extension}"
+
+    file_path = UPLOAD_DIR / filename
+
+    with open(file_path, "wb") as buffer:
+        buffer.write(file_content)
+
+    complaint.attachment_url = f"/uploads/{filename}"
+    complaint.attachment_name = file.filename
+
+    session.add(complaint)
+    session.commit()
+    session.refresh(complaint)
+
+    return {
+        "attachment_url": complaint.attachment_url,
+        "attachment_name": complaint.attachment_name,
+    }
+
 
 
 @router.get(

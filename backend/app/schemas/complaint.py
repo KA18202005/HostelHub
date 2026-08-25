@@ -52,6 +52,8 @@ class ComplaintRead(SQLModel):
     reported_by_name: str
     reported_by_email: str
 
+    attachment_url: str | None = None
+    attachment_name: str | None = None
     assigned_to_id: UUID | None
         
 
