@@ -112,39 +112,7 @@ def get_staff_dashboard(
             detail="Staff or admin access required",
         )
 
-    total_complaints = session.exec(
-        select(func.count(Complaint.id))
-    ).one()
-
-    unassigned_complaints = session.exec(
-        select(func.count(Complaint.id)).where(
-            Complaint.assigned_to_id == None
-        )
-    ).one()
-
-    assigned_complaints = session.exec(
-        select(func.count(Complaint.id)).where(
-            Complaint.assigned_to_id != None
-        )
-    ).one()
-
-    in_progress_complaints = session.exec(
-        select(func.count(Complaint.id)).where(
-            Complaint.status == ComplaintStatus.IN_PROGRESS
-        )
-    ).one()
-
-    resolved_complaints = session.exec(
-        select(func.count(Complaint.id)).where(
-            Complaint.status == ComplaintStatus.RESOLVED
-        )
-    ).one()
-
-    closed_complaints = session.exec(
-        select(func.count(Complaint.id)).where(
-            Complaint.status == ComplaintStatus.CLOSED
-        )
-    ).one()
+    stats = get_complaint_statistics(session)
 
     recent_complaints = session.exec(
         select(Complaint)
@@ -153,12 +121,12 @@ def get_staff_dashboard(
     ).all()
 
     return StaffDashboard(
-        total_complaints=total_complaints,
-        unassigned_complaints=unassigned_complaints,
-        assigned_complaints=assigned_complaints,
-        in_progress_complaints=in_progress_complaints,
-        resolved_complaints=resolved_complaints,
-        closed_complaints=closed_complaints,
+        total_complaints=stats["total"],
+        unassigned_complaints=stats["unassigned"],
+        assigned_complaints=stats["assigned"],
+        in_progress_complaints=stats["in_progress"],
+        resolved_complaints=stats["resolved"],
+        closed_complaints=stats["closed"],
         recent_complaints=[
             DashboardComplaint(
                 id=complaint.id,
@@ -170,7 +138,6 @@ def get_staff_dashboard(
             for complaint in recent_complaints
         ],
     )
-    
 
 
 @router.get(
@@ -201,15 +168,30 @@ def get_admin_dashboard(
         select(func.count(Room.id))
     ).one()
 
+    recent_complaints = session.exec(
+        select(Complaint)
+        .order_by(Complaint.created_at.desc())
+        .limit(10)
+    ).all()
+
     return AdminDashboard(
-        total_users=total_users,
-        total_hostels=total_hostels,
-        total_rooms=total_rooms,
         total_complaints=stats["total"],
-        open_complaints=stats["open"],
         unassigned_complaints=stats["unassigned"],
         assigned_complaints=stats["assigned"],
         in_progress_complaints=stats["in_progress"],
         resolved_complaints=stats["resolved"],
         closed_complaints=stats["closed"],
+        total_users=total_users,
+        total_hostels=total_hostels,
+        total_rooms=total_rooms,
+        recent_complaints=[
+            DashboardComplaint(
+                id=complaint.id,
+                title=complaint.title,
+                priority=complaint.priority,
+                status=complaint.status,
+                created_at=complaint.created_at,
+            )
+            for complaint in recent_complaints
+        ],
     )

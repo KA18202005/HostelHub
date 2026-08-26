@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import Session, select
+from sqlmodel import Session, func, select
 
 from app.api.dependencies import get_current_user
 from app.db.database import get_session
 from app.enums.roles import UserRole
 from app.models.user import User
-from app.schemas.admin import AdminUserRead
+from app.schemas.admin import AdminUserRead, PaginatedAdminUserRead
 from uuid import UUID
 from app.models.room import Room
 from app.schemas.admin import AdminRoleUpdate
@@ -22,7 +22,7 @@ router = APIRouter(
 
 @router.get(
     "/users",
-    response_model=list[AdminUserRead],
+    response_model=PaginatedAdminUserRead,
 )
 def get_users(
     page: int = Query(1, ge=1),
@@ -38,6 +38,10 @@ def get_users(
 
     offset = (page - 1) * limit
 
+    total = session.exec(
+        select(func.count(User.id))
+    ).one()
+
     statement = (
         select(User)
         .order_by(User.created_at.desc())
@@ -45,7 +49,17 @@ def get_users(
         .limit(limit)
     )
 
-    return session.exec(statement).all()
+    users = session.exec(statement).all()
+
+    pages = (total + limit - 1) // limit
+
+    return PaginatedAdminUserRead(
+        items=users,
+        page=page,
+        limit=limit,
+        total=total,
+        pages=pages,
+    )
 
 
 @router.get(
@@ -53,8 +67,6 @@ def get_users(
     response_model=list[AdminUserRead],
 )
 def get_staff_users(
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
@@ -67,8 +79,6 @@ def get_staff_users(
             detail="Staff or admin access required",
         )
 
-    offset = (page - 1) * limit
-
     statement = (
         select(User)
         .where(
@@ -78,11 +88,9 @@ def get_staff_users(
                     UserRole.ADMIN,
                 ]
             ),
-            User.is_active == True,
+            User.is_active.is_(True),
         )
         .order_by(User.name.asc())
-        .offset(offset)
-        .limit(limit)
     )
 
     return session.exec(statement).all()

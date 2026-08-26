@@ -3,6 +3,7 @@ from uuid import UUID
 
 from sqlmodel import SQLModel
 
+from pydantic import BaseModel
 from app.enums.roles import UserRole
 
 
@@ -25,3 +26,11 @@ class AdminRoleUpdate(SQLModel):
     
 class AdminUserStatusUpdate(SQLModel):
     is_active: bool
+    
+    
+class PaginatedAdminUserRead(BaseModel):
+    items: list[AdminUserRead]
+    page: int
+    limit: int
+    total: int
+    pages: int

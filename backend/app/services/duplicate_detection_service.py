@@ -1,11 +1,65 @@
+import re
+
 from google import genai
 
 from app.core.config import settings
 from app.schemas.duplicate import DuplicateDetectionResult
 
+
 client = genai.Client(
     api_key=settings.GEMINI_API_KEY
 )
+
+
+MAX_CANDIDATES = 10
+
+
+def _tokenize(text: str) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"\b[a-zA-Z0-9]+\b", text.lower())
+        if len(token) > 2
+    }
+
+
+def _candidate_score(
+    new_tokens: set[str],
+    complaint: dict,
+) -> int:
+    existing_tokens = _tokenize(
+        f"{complaint['title']} {complaint['description']}"
+    )
+
+    return len(new_tokens & existing_tokens)
+
+
+def _select_candidates(
+    title: str,
+    description: str,
+    existing_complaints: list[dict],
+) -> list[dict]:
+    new_tokens = _tokenize(
+        f"{title} {description}"
+    )
+
+    scored_complaints = [
+        (
+            _candidate_score(new_tokens, complaint),
+            complaint,
+        )
+        for complaint in existing_complaints
+    ]
+
+    scored_complaints.sort(
+        key=lambda item: item[0],
+        reverse=True,
+    )
+
+    return [
+        complaint
+        for score, complaint in scored_complaints[:MAX_CANDIDATES]
+        if score > 0
+    ]
 
 
 def detect_duplicate(
@@ -22,6 +76,20 @@ def detect_duplicate(
             reason="No existing active complaints were found for comparison.",
         )
 
+    candidates = _select_candidates(
+        title=title,
+        description=description,
+        existing_complaints=existing_complaints,
+    )
+
+    if not candidates:
+        return DuplicateDetectionResult(
+            is_duplicate=False,
+            similar_complaint_id=None,
+            confidence=0.0,
+            reason="No sufficiently similar existing complaints were found for comparison.",
+        )
+
     complaints_text = "\n\n".join(
         [
             (
@@ -29,7 +97,7 @@ def detect_duplicate(
                 f"Title: {complaint['title']}\n"
                 f"Description: {complaint['description']}"
             )
-            for complaint in existing_complaints
+            for complaint in candidates
         ]
     )
 

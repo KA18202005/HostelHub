@@ -14,6 +14,7 @@ from app.services.notification_service import create_notification
 from app.models.complaint_history import ComplaintHistory
 from app.schemas.complaint import ComplaintHistoryRead
 from app.services.complaint_history_service import create_history
+from app.schemas.complaint import PaginatedComplaintRead
 from app.services.staff_assignment_service import get_least_loaded_staff
 from app.services.complaint_priority_service import requires_escalation
 from app.services.complaint_duplicate_service import (
@@ -27,7 +28,7 @@ from app.schemas.complaint import (
     ComplaintUpdate,
 )
 from sqlalchemy.orm import selectinload
-from sqlmodel import Session, select
+from sqlmodel import Session, func, select
 from uuid import UUID
 from pathlib import Path
 
@@ -274,7 +275,7 @@ def create_complaint(
 
 @router.get(
     "",
-    response_model=list[ComplaintRead],
+    response_model=PaginatedComplaintRead,
 )
 def get_my_complaints(
     page: int = Query(1, ge=1),
@@ -283,6 +284,12 @@ def get_my_complaints(
     session: Session = Depends(get_session),
 ):
     offset = (page - 1) * limit
+
+    total = session.exec(
+        select(func.count(Complaint.id)).where(
+            Complaint.reported_by_id == current_user.id
+        )
+    ).one()
 
     statement = (
         select(Complaint)
@@ -301,7 +308,7 @@ def get_my_complaints(
 
     complaints = session.exec(statement).all()
 
-    return [
+    items = [
         ComplaintRead(
             id=complaint.id,
             title=complaint.title,
@@ -322,11 +329,21 @@ def get_my_complaints(
         )
         for complaint in complaints
     ]
+
+    pages = (total + limit - 1) // limit
+
+    return PaginatedComplaintRead(
+        items=items,
+        page=page,
+        limit=limit,
+        total=total,
+        pages=pages,
+    )
     
 
 @router.get(
     "/all",
-    response_model=list[ComplaintRead],
+    response_model=PaginatedComplaintRead,
 )
 def get_all_complaints(
     page: int = Query(1, ge=1),
@@ -340,6 +357,10 @@ def get_all_complaints(
     session: Session = Depends(get_session),
 ):
     offset = (page - 1) * limit
+
+    total = session.exec(
+        select(func.count(Complaint.id))
+    ).one()
 
     statement = (
         select(Complaint)
@@ -356,7 +377,7 @@ def get_all_complaints(
 
     complaints = session.exec(statement).all()
 
-    return [
+    items = [
         ComplaintRead(
             id=complaint.id,
             title=complaint.title,
@@ -377,6 +398,16 @@ def get_all_complaints(
         )
         for complaint in complaints
     ]
+
+    pages = (total + limit - 1) // limit
+
+    return PaginatedComplaintRead(
+        items=items,
+        page=page,
+        limit=limit,
+        total=total,
+        pages=pages,
+    )
 
 
 @router.patch(
@@ -411,30 +442,23 @@ def assign_complaint(
             detail="Resolved or closed complaints cannot be assigned",
         )
 
-    staff_user = session.get(
-        User,
-        assignment.assigned_to_id,
-    )
+    staff_user = session.exec(
+        select(User).where(
+            User.id == assignment.assigned_to_id,
+            User.role.in_(
+                [
+                    UserRole.STAFF,
+                    UserRole.ADMIN,
+                ]
+            ),
+            User.is_active.is_(True),
+        )
+    ).first()
 
     if staff_user is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Assigned user not found",
-        )
-
-    if staff_user.role not in (
-        UserRole.STAFF,
-        UserRole.ADMIN,
-    ):
-        raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Complaint can only be assigned to staff or admin",
-        )
-
-    if not staff_user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot assign complaint to an inactive user",
+            detail="Complaint can only be assigned to an active staff or admin user",
         )
 
     old_assigned_to_id = complaint.assigned_to_id

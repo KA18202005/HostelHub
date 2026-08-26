@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { FileText, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-
+import { useState } from "react";
 import api from "@/lib/api";
 
 type ComplaintStatus =
@@ -42,8 +42,23 @@ type Complaint = {
     assigned_to_id: string | null;
 };
 
-async function getComplaints(): Promise<Complaint[]> {
-    const response = await api.get("/api/v1/complaints");
+type PaginatedComplaintResponse = {
+    items: Complaint[];
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+};
+
+async function getComplaints(
+    page: number
+): Promise<PaginatedComplaintResponse> {
+    const response = await api.get("/api/v1/complaints", {
+        params: {
+            page,
+            limit: 10,
+        },
+    });
 
     return response.data;
 }
@@ -104,14 +119,19 @@ function roomLabel(complaint: Complaint) {
 export default function StudentComplaintsPage() {
     const router = useRouter();
 
+    const [page, setPage] = useState(1);
+
     const {
-        data: complaints,
+        data,
         isLoading,
         isError,
     } = useQuery({
-        queryKey: ["student-complaints"],
-        queryFn: getComplaints,
+        queryKey: ["student-complaints", page],
+        queryFn: () => getComplaints(page),
+        placeholderData: (previousData) => previousData,
     });
+
+    const complaints = data?.items ?? [];
 
     if (isLoading) {
         return (
@@ -283,8 +303,34 @@ export default function StudentComplaintsPage() {
                             </button>
                         ))}
                     </section>
+
                 )}
             </div>
+            {data && data.pages > 1 && (
+                <div className="mt-6 flex items-center justify-between rounded-2xl border border-zinc-200 bg-white px-6 py-4">
+                    <button
+                        type="button"
+                        onClick={() => setPage((current) => current - 1)}
+                        disabled={page === 1}
+                        className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                        Previous
+                    </button>
+
+                    <span className="text-sm text-zinc-500">
+                        Page {data.page} of {data.pages}
+                    </span>
+
+                    <button
+                        type="button"
+                        onClick={() => setPage((current) => current + 1)}
+                        disabled={page === data.pages}
+                        className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                        Next
+                    </button>
+                </div>
+            )}
         </main>
     );
 }

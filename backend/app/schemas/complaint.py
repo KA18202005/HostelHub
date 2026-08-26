@@ -1,6 +1,7 @@
 from uuid import UUID
 from datetime import datetime
 from sqlmodel import SQLModel
+from pydantic import BaseModel
 from app.models.room import Room
 from app.enums.complaint_category import ComplaintCategory
 from app.enums.complaint_priority import ComplaintPriority
@@ -67,3 +68,13 @@ class ComplaintHistoryRead(SQLModel):
     old_value: str | None
     new_value: str | None
     created_at: datetime
+    
+
+
+
+class PaginatedComplaintRead(BaseModel):
+    items: list[ComplaintRead]
+    page: int
+    limit: int
+    total: int
+    pages: int
