@@ -28,7 +28,7 @@ from app.schemas.complaint import (
     ComplaintUpdate,
 )
 from sqlalchemy.orm import selectinload
-from sqlmodel import Session, func, select
+from sqlmodel import Session, func, select, or_
 from uuid import UUID
 from pathlib import Path
 
@@ -280,22 +280,32 @@ def create_complaint(
 def get_my_complaints(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
+    status: ComplaintStatus | None = Query(None),
+    search: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
     offset = (page - 1) * limit
 
-    total = session.exec(
-        select(func.count(Complaint.id)).where(
-            Complaint.reported_by_id == current_user.id
+    conditions = [Complaint.reported_by_id == current_user.id]
+    if status is not None:
+        conditions.append(Complaint.status == status)
+    if search:
+        search_term = f"%{search.strip()}%"
+        conditions.append(
+            or_(
+                Complaint.title.ilike(search_term),
+                Complaint.description.ilike(search_term),
+            )
         )
+
+    total = session.exec(
+        select(func.count(Complaint.id)).where(*conditions)
     ).one()
 
     statement = (
         select(Complaint)
-        .where(
-            Complaint.reported_by_id == current_user.id
-        )
+        .where(*conditions)
         .options(
             selectinload(Complaint.room)
         )
@@ -348,6 +358,10 @@ def get_my_complaints(
 def get_all_complaints(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
+    status: ComplaintStatus | None = Query(None),
+    priority: ComplaintPriority | None = Query(None),
+    category: ComplaintCategory | None = Query(None),
+    search: str | None = Query(None),
     current_user: User = Depends(
         require_role(
             UserRole.STAFF,
@@ -358,9 +372,26 @@ def get_all_complaints(
 ):
     offset = (page - 1) * limit
 
-    total = session.exec(
-        select(func.count(Complaint.id))
-    ).one()
+    conditions = []
+    if status is not None:
+        conditions.append(Complaint.status == status)
+    if priority is not None:
+        conditions.append(Complaint.priority == priority)
+    if category is not None:
+        conditions.append(Complaint.category == category)
+    if search:
+        search_term = f"%{search.strip()}%"
+        conditions.append(
+            or_(
+                Complaint.title.ilike(search_term),
+                Complaint.description.ilike(search_term),
+            )
+        )
+
+    count_query = select(func.count(Complaint.id))
+    if conditions:
+        count_query = count_query.where(*conditions)
+    total = session.exec(count_query).one()
 
     statement = (
         select(Complaint)
@@ -368,9 +399,13 @@ def get_all_complaints(
             selectinload(Complaint.room),
             selectinload(Complaint.reported_by),
         )
-        .order_by(
-            Complaint.created_at.desc()
-        )
+    )
+    if conditions:
+        statement = statement.where(*conditions)
+
+    statement = (
+        statement
+        .order_by(Complaint.created_at.desc())
         .offset(offset)
         .limit(limit)
     )

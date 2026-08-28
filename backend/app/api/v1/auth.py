@@ -4,6 +4,7 @@ from typing import Dict
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from google_auth_oauthlib.flow import Flow
+from oauthlib.oauth2.rfc6749.errors import CustomOAuth2Error
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from sqlmodel import Session, select
@@ -115,9 +116,20 @@ async def google_callback(
     flow.state = state
     flow.code_verifier = code_verifier
 
-    flow.fetch_token(
-        authorization_response=str(request.url)
-    )
+    try:
+        flow.fetch_token(
+            authorization_response=str(request.url)
+        )
+    except CustomOAuth2Error as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Google OAuth token exchange failed: {exc}",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Google OAuth callback failed: {exc}",
+        ) from exc
 
     credentials = flow.credentials
 

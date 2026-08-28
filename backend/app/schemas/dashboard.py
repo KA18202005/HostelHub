@@ -46,3 +46,4 @@ class AdminDashboard(SQLModel):
     in_progress_complaints: int
     resolved_complaints: int
     closed_complaints: int
+    recent_complaints: list[DashboardComplaint] = []

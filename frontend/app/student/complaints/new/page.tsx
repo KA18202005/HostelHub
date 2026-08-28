@@ -1,491 +1,417 @@
-"use client";
+﻿"use client";
 
-import { FormEvent, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { FormEvent, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import Link from "next/link";
+import axios from "axios";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  FileQuestion,
+  Home,
+  Loader2,
+  Sparkles,
+  UploadCloud,
+} from "lucide-react";
 import api from "@/lib/api";
+import { AppShell } from "@/components/layout/app-shell";
+import { FileUpload } from "@/components/ui/file-upload";
+import { useToast } from "@/components/ui/toast";
+import { cn } from "@/lib/utils";
 
-type Room = {
-    id: string;
-    block: string;
-    room_number: string;
-    floor: number;
-    capacity: number;
-    hostel_id: string;
-    apartment: string | null;
+type UserRoom = {
+  block: string;
+  floor: number;
+  room_number: string;
+  apartment: string | null;
+};
+
+type CurrentUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  room: UserRoom | null;
 };
 
 type DuplicateDetail = {
-    message: string;
-    similar_complaint_id?: string;
-    confidence?: number;
-    reason?: string;
+  message: string;
+  similar_complaint_id?: string;
+  confidence?: number;
+  reason?: string;
 };
 
-async function getRooms(): Promise<Room[]> {
-    const response = await api.get("/api/v1/rooms/options");
-    return response.data;
-}
-
 export default function NewComplaintPage() {
-    const router = useRouter();
+  const router = useRouter();
+  const { success, error: toastError } = useToast();
 
-    const [title, setTitle] = useState("");
-    const [description, setDescription] = useState("");
-    const [currentUser, setCurrentUser] = useState<any>(null);
-    const [loadingUser, setLoadingUser] = useState(true);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState("");
-    const [duplicate, setDuplicate] = useState<DuplicateDetail | null>(null);
-    const [attachment, setAttachment] = useState<File | null>(null);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [loadingUser, setLoadingUser] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [duplicate, setDuplicate] = useState<DuplicateDetail | null>(null);
+  const [attachment, setAttachment] = useState<File | null>(null);
 
-    const {
-        data: rooms = [],
-        isLoading: roomsLoading,
-        isError: roomsError,
-    } = useQuery({
-        queryKey: ["rooms"],
-        queryFn: getRooms,
-    });
+  useEffect(() => {
+    async function loadUser() {
+      try {
+        const response = await api.get("/api/v1/auth/me");
+        setCurrentUser(response.data);
+      } catch (err) {
+        console.error("Failed to load user:", err);
+      } finally {
+        setLoadingUser(false);
+      }
+    }
 
-    useEffect(() => {
-        async function loadUser() {
-            try {
-                const response = await api.get("/api/v1/auth/me");
-                setCurrentUser(response.data);
-            } catch (error) {
-                console.error("Failed to load user:", error);
-            } finally {
-                setLoadingUser(false);
-            }
-        }
+    loadUser();
+  }, []);
 
-        loadUser();
-    }, []);
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
 
+    if (loading) return;
 
+    setError("");
+    setDuplicate(null);
 
-    async function handleSubmit(
-        event: FormEvent<HTMLFormElement>,
-    ) {
-        event.preventDefault();
+    const trimmedTitle = title.trim();
+    const trimmedDesc = description.trim();
 
-        if (loading) {
-            return;
-        }
+    if (!trimmedTitle) {
+      setError("Please enter a complaint title.");
+      return;
+    }
 
-        setError("");
-        setDuplicate(null);
+    if (trimmedTitle.length < 5) {
+      setError("Complaint title must be at least 5 characters.");
+      return;
+    }
 
-        if (!title.trim()) {
-            setError("Please enter a complaint title.");
-            return;
-        }
+    if (!trimmedDesc) {
+      setError("Please enter a complaint description.");
+      return;
+    }
 
-        if (!description.trim()) {
-            setError("Please enter a complaint description.");
-            return;
-        }
+    if (trimmedDesc.length < 10) {
+      setError("Complaint description must be at least 10 characters.");
+      return;
+    }
 
-        if (title.trim().length < 5) {
-            setError(
-                "Complaint title must be at least 5 characters.",
-            );
-            return;
-        }
+    if (!currentUser?.room) {
+      setError(
+        "You cannot create a complaint until a hostel room has been assigned to your account by an administrator."
+      );
+      return;
+    }
 
-        if (description.trim().length < 10) {
-            setError(
-                "Complaint description must be at least 10 characters.",
-            );
-            return;
-        }
+    setLoading(true);
 
-        if (!currentUser?.room) {
-            setError(
-                "You cannot create a complaint until a room has been assigned to you.",
-            );
-            return;
-        }
+    try {
+      const response = await api.post("/api/v1/complaints", {
+        title: trimmedTitle,
+        description: trimmedDesc,
+        block: currentUser.room.block,
+        floor: currentUser.room.floor,
+        room_number: currentUser.room.room_number,
+        apartment: currentUser.room.apartment,
+      });
 
-        setLoading(true);
+      const complaint = response.data;
+      success("Complaint reported successfully!");
 
+      if (attachment) {
         try {
-            const response = await api.post(
-                "/api/v1/complaints",
-                {
-                    title,
-                    description,
+          const formData = new FormData();
+          formData.append("file", attachment);
 
-                    // Use the room assigned by Admin.
-                    block: currentUser.room.block,
-                    floor: currentUser.room.floor,
-                    room_number: currentUser.room.room_number,
-                    apartment: currentUser.room.apartment,
-                },
-            );
-
-            const complaint = response.data;
-
-            if (attachment) {
-                try {
-                    const formData = new FormData();
-
-                    formData.append("file", attachment);
-
-                    await api.post(
-                        `/api/v1/attachments/${complaint.id}/attachments`,
-                        formData,
-                        {
-                            headers: {
-                                "Content-Type": "multipart/form-data",
-                            },
-                        },
-                    );
-                } catch (attachmentError: any) {
-                    console.error(
-                        "Attachment upload failed:",
-                        attachmentError,
-                    );
-
-                    setError(
-                        "Complaint was created, but the attachment could not be uploaded. You can upload it from the complaint page.",
-                    );
-
-                    router.push(
-                        `/student/complaints/${complaint.id}`,
-                    );
-
-                    return;
-                }
+          await api.post(
+            `/api/v1/attachments/${complaint.id}/attachments`,
+            formData,
+            {
+              headers: {
+                "Content-Type": "multipart/form-data",
+              },
             }
-
-            router.push(
-                `/student/complaints/${complaint.id}`,
-            );
-
-        } catch (error: any) {
-            if (error?.response?.status === 409) {
-                setDuplicate(error.response.data.detail);
-                return;
-            }
-
-            if (error?.response?.status === 401) {
-                localStorage.removeItem("access_token");
-                router.replace("/login");
-                return;
-            }
-
-            setError(
-                error?.response?.data?.detail ||
-                "Unable to create complaint.",
-            );
-        } finally {
-            setLoading(false);
+          );
+        } catch (attachmentError) {
+          console.error("Attachment upload failed:", attachmentError);
+          toastError(
+            "Attachment upload failed",
+            "You can upload the image from the complaint details page."
+          );
         }
-    }
+      }
 
-    if (roomsLoading) {
-        return (
-            <main className="flex min-h-screen items-center justify-center bg-zinc-50">
-                <p className="text-sm text-zinc-500">
-                    room information...
+      router.push(`/student/complaints/${complaint.id}`);
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        if (err.response?.status === 409) {
+          setDuplicate(err.response.data.detail);
+          return;
+        }
+
+        if (err.response?.status === 401) {
+          localStorage.removeItem("access_token");
+          router.replace("/login");
+          return;
+        }
+
+        setError(
+          err.response?.data?.detail ||
+            "Unable to create complaint. Please try again."
+        );
+      } else {
+        setError("Unable to create complaint. Please try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <AppShell role="STUDENT" maxWidth="narrow" userName={currentUser?.name}>
+      <div className="space-y-6">
+        {/* Navigation Breadcrumb */}
+        <div className="flex items-center gap-2">
+          <Link
+            href="/student/complaints"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 transition-colors focus-visible:ring-2 focus-visible:ring-zinc-900 rounded-lg outline-none"
+          >
+            <ArrowLeft size={14} />
+            <span>Back to Complaints</span>
+          </Link>
+        </div>
+
+        {/* Header */}
+        <div className="border-b border-zinc-200/60 pb-5">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900">
+            Report a Maintenance Issue
+          </h1>
+          <p className="mt-1 text-xs sm:text-sm text-zinc-500">
+            Submit an issue for your hostel room. Our AI triage system will verify similarity and assign it to the staff.
+          </p>
+        </div>
+
+        {/* Duplicate Warning Card */}
+        {duplicate && (
+          <div className="rounded-3xl border border-amber-200 bg-amber-50/90 p-6 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="flex items-start gap-4">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 border border-amber-200">
+                <Sparkles size={22} className="animate-pulse" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-bold text-amber-950">
+                  Similar Existing Complaint Detected
+                </h3>
+                <p className="mt-1.5 text-xs sm:text-sm text-amber-800 leading-relaxed">
+                  {duplicate.message}
                 </p>
-            </main>
-        );
-    }
 
-    if (roomsError) {
-        return (
-            <main className="flex min-h-screen items-center justify-center bg-zinc-50 px-6">
-                <div className="rounded-2xl bg-white p-8 text-center shadow-sm">
-                    <h1 className="font-semibold text-zinc-900">
-                        Unable to load rooms
-                    </h1>
+                {duplicate.reason && (
+                  <div className="mt-3 rounded-xl bg-amber-100/70 p-3 text-xs text-amber-900 font-medium">
+                    <span className="font-bold">AI Analysis:</span> {duplicate.reason}
+                  </div>
+                )}
 
-                    <p className="mt-2 text-sm text-zinc-500">
-                        Please refresh the page and try again.
-                    </p>
-                </div>
-            </main>
-        );
-    }
-
-    return (
-        <main className="min-h-screen bg-zinc-50">
-            <header className="border-b border-zinc-200 bg-white">
-                <div className="mx-auto flex h-16 max-w-4xl items-center px-6">
-                    <button
-                        onClick={() => router.back()}
-                        className="text-sm font-medium text-zinc-500 hover:text-zinc-900"
-                    >
-                        ← Back
-                    </button>
-
-                    <h1 className="ml-6 text-lg font-semibold text-zinc-900">
-                        Report a Complaint
-                    </h1>
-                </div>
-            </header>
-
-            <div className="mx-auto max-w-2xl px-6 py-10">
-                <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm sm:p-8">
-                    <div className="mb-8">
-                        <h2 className="text-2xl font-bold text-zinc-900">
-                            What is the problem?
-                        </h2>
-
-                        <p className="mt-2 text-sm text-zinc-500">
-                            Describe the issue clearly so hostel staff can
-                            resolve it quickly.
-                        </p>
+                {duplicate.confidence !== undefined && (
+                  <div className="mt-3 space-y-1.5 max-w-xs">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-amber-900">
+                      <span>Similarity Confidence</span>
+                      <span>{Math.round(duplicate.confidence * 100)}%</span>
                     </div>
+                    <div className="h-2 w-full rounded-full bg-amber-200/80 overflow-hidden">
+                      <div
+                        className="h-full bg-amber-600 rounded-full transition-all duration-500"
+                        style={{ width: `${Math.round(duplicate.confidence * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
 
-                    {duplicate && (
-                        <div className="mb-6 rounded-xl border border-orange-200 bg-orange-50 p-5">
-                            <h3 className="font-semibold text-orange-900">
-                                Similar complaint found
-                            </h3>
-
-                            <p className="mt-2 text-sm text-orange-800">
-                                {duplicate.message}
-                            </p>
-
-                            {duplicate.confidence !== undefined && (
-                                <p className="mt-2 text-sm text-orange-800">
-                                    Confidence:{" "}
-                                    {Math.round(
-                                        duplicate.confidence * 100,
-                                    )}
-                                    %
-                                </p>
-                            )}
-
-                            {duplicate.reason && (
-                                <p className="mt-2 text-sm text-orange-800">
-                                    {duplicate.reason}
-                                </p>
-                            )}
-
-                            {duplicate.similar_complaint_id && (
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        router.push(
-                                            `/student/complaints/${duplicate.similar_complaint_id}`,
-                                        )
-                                    }
-                                    className="mt-4 rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700"
-                                >
-                                    View Similar Complaint
-                                </button>
-                            )}
-                        </div>
-                    )}
-
-                    {error && (
-                        <div className="mb-6 rounded-xl bg-red-50 p-4 text-sm text-red-700">
-                            {error}
-                        </div>
-                    )}
-
-                    <form
-                        onSubmit={handleSubmit}
-                        className="space-y-6"
+                {duplicate.similar_complaint_id && (
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        router.push(
+                          `/student/complaints/${duplicate.similar_complaint_id}`
+                        )
+                      }
+                      className="inline-flex items-center gap-2 rounded-xl bg-amber-800 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-amber-900 active:scale-95 transition-all"
                     >
-                        <div>
-                            <label
-                                htmlFor="title"
-                                className="mb-2 block text-sm font-medium text-zinc-700"
-                            >
-                                Complaint title
-                            </label>
-
-                            <input
-                                id="title"
-                                value={title}
-                                onChange={(event) =>
-                                    setTitle(event.target.value)
-                                }
-                                placeholder="e.g. Water leaking from ceiling"
-                                required
-                                maxLength={200}
-                                className="w-full rounded-lg border border-zinc-300 px-4 py-3 text-sm outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
-                            />
-                        </div>
-
-                        <div>
-                            <label
-                                htmlFor="description"
-                                className="mb-2 block text-sm font-medium text-zinc-700"
-                            >
-                                Description
-                            </label>
-
-                            <textarea
-                                id="description"
-                                value={description}
-                                onChange={(event) =>
-                                    setDescription(event.target.value)
-                                }
-                                placeholder="Describe what is happening..."
-                                required
-                                rows={6}
-                                className="w-full resize-none rounded-lg border border-zinc-300 px-4 py-3 text-sm outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="mb-2 block text-sm font-medium text-zinc-700">
-                                Attachment
-                            </label>
-
-                            <input
-                                type="file"
-                                accept="image/jpeg,image/png,image/webp"
-                                onChange={(event) => {
-                                    const file = event.target.files?.[0];
-
-                                    if (!file) {
-                                        setAttachment(null);
-                                        return;
-                                    }
-
-                                    const allowedTypes = [
-                                        "image/jpeg",
-                                        "image/png",
-                                        "image/webp",
-                                    ];
-
-                                    if (!allowedTypes.includes(file.type)) {
-                                        setError(
-                                            "Only JPG, PNG, and WEBP images are allowed.",
-                                        );
-                                        setAttachment(null);
-                                        event.target.value = "";
-                                        return;
-                                    }
-
-                                    if (file.size > 5 * 1024 * 1024) {
-                                        setError(
-                                            "Image size must not exceed 5 MB.",
-                                        );
-                                        setAttachment(null);
-                                        event.target.value = "";
-                                        return;
-                                    }
-
-                                    setError("");
-                                    setAttachment(file);
-                                }}
-                                className="block w-full text-sm text-zinc-600"
-                            />
-
-                            {attachment && (
-                                <div className="mt-2 flex items-center justify-between rounded-lg bg-zinc-50 px-3 py-2">
-                                    <p className="truncate text-sm text-zinc-700">
-                                        {attachment.name}
-                                    </p>
-
-                                    <button
-                                        type="button"
-                                        onClick={() => setAttachment(null)}
-                                        className="ml-3 text-sm font-medium text-red-600 hover:text-red-700"
-                                    >
-                                        Remove
-                                    </button>
-                                </div>
-                            )}
-
-                            <p className="mt-1 text-xs text-zinc-500">
-                                JPG, PNG, or WEBP. Maximum size: 5 MB.
-                            </p>
-                        </div>
-
-                        <div className="space-y-4">
-                            <h3 className="text-sm font-semibold text-zinc-900">
-                                Your room
-                            </h3>
-
-                            {loadingUser ? (
-                                <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
-                                    <p className="text-sm text-zinc-500">
-                                        Loading your room...
-                                    </p>
-                                </div>
-                            ) : currentUser?.room ? (
-                                <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
-                                    <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                                        Assigned room
-                                    </p>
-
-                                    <p className="mt-2 font-semibold text-zinc-900">
-                                        Block {currentUser.room.block}
-                                        {" • "}
-                                        Floor {currentUser.room.floor}
-                                        {" • "}
-                                        Room {currentUser.room.room_number}
-                                    </p>
-
-                                    {currentUser.room.apartment && (
-                                        <p className="mt-1 text-sm text-zinc-500">
-                                            Apartment {currentUser.room.apartment}
-                                        </p>
-                                    )}
-                                </div>
-                            ) : (
-                                <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-                                    <p className="font-medium text-red-700">
-                                        No room assigned
-                                    </p>
-
-                                    <p className="mt-1 text-sm text-red-600">
-                                        You have not been assigned a room yet.
-                                        Please contact the administrator.
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
-                            <button
-                                type="button"
-                                onClick={() => router.back()}
-                                className="rounded-lg border border-zinc-300 px-5 py-3 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
-                            >
-                                Cancel
-                            </button>
-
-                            <button
-                                type="submit"
-                                disabled={
-                                    loading ||
-                                    loadingUser ||
-                                    !currentUser?.room
-                                }
-
-                                className="rounded-lg bg-zinc-900 px-5 py-3 text-sm font-semibold text-white hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                {loading
-                                    ? "Submitting..."
-                                    : "Submit Complaint"}
-                            </button>
-                        </div>
-                    </form>
-                </div>
+                      <span>View Existing Complaint</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
-        </main>
-    );
-}
+          </div>
+        )}
 
-function roomNumberSort(a: string, b: string) {
-    const numberA = Number(a);
-    const numberB = Number(b);
+        {/* Error Alert */}
+        {error && (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs sm:text-sm text-rose-800 flex items-center gap-3 animate-in shake duration-200">
+            <AlertTriangle size={18} className="text-rose-600 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
 
-    if (!Number.isNaN(numberA) && !Number.isNaN(numberB)) {
-        return numberA - numberB;
-    }
+        {/* Main Form */}
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Card 1: Room Verification */}
+          <div className="rounded-3xl border border-zinc-200/80 bg-white p-6 shadow-xs">
+            <div className="flex items-center gap-2 mb-3">
+              <Home size={18} className="text-zinc-600" />
+              <h2 className="text-sm font-bold text-zinc-900">
+                Location &amp; Room Details
+              </h2>
+            </div>
 
-    return a.localeCompare(b);
+            {loadingUser ? (
+              <div className="flex items-center gap-3 rounded-2xl bg-zinc-50 p-4 text-xs text-zinc-400">
+                <Loader2 size={16} className="animate-spin" />
+                <span>Verifying your assigned hostel room...</span>
+              </div>
+            ) : currentUser?.room ? (
+              <div className="rounded-2xl border border-zinc-100 bg-zinc-50/80 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                    Assigned Room
+                  </span>
+                  <p className="mt-0.5 text-sm font-bold text-zinc-900">
+                    Block {currentUser.room.block} • Floor {currentUser.room.floor} • Room {currentUser.room.room_number}
+                    {currentUser.room.apartment ? ` (Apartment ${currentUser.room.apartment})` : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200/60 shrink-0">
+                  <CheckCircle2 size={13} />
+                  <span>Verified resident</span>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4">
+                <p className="text-xs font-bold text-rose-900">
+                  No Room Assigned
+                </p>
+                <p className="mt-1 text-xs text-rose-700">
+                  You have not been assigned to a hostel room in the system yet. Please reach out to the hostel warden or administrator.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Card 2: Complaint Information */}
+          <div className="rounded-3xl border border-zinc-200/80 bg-white p-6 shadow-xs space-y-5">
+            <div className="flex items-center gap-2">
+              <FileQuestion size={18} className="text-zinc-600" />
+              <h2 className="text-sm font-bold text-zinc-900">
+                Issue Description
+              </h2>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label
+                  htmlFor="title"
+                  className="text-xs font-semibold text-zinc-700"
+                >
+                  Complaint Title <span className="text-rose-500">*</span>
+                </label>
+                <span
+                  className={cn(
+                    "text-[11px] font-medium",
+                    title.length >= 5 ? "text-emerald-600" : "text-zinc-400"
+                  )}
+                >
+                  {title.length}/200
+                </span>
+              </div>
+              <input
+                id="title"
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g., Ceiling fan making humming noise / Tap leaking"
+                maxLength={200}
+                required
+                disabled={loading}
+                className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-100 transition-all disabled:bg-zinc-50"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label
+                  htmlFor="description"
+                  className="text-xs font-semibold text-zinc-700"
+                >
+                  Detailed Description <span className="text-rose-500">*</span>
+                </label>
+                <span
+                  className={cn(
+                    "text-[11px] font-medium",
+                    description.length >= 10 ? "text-emerald-600" : "text-zinc-400"
+                  )}
+                >
+                  {description.length >= 10 ? `${description.length} chars (valid)` : "Min. 10 chars"}
+                </span>
+              </div>
+              <textarea
+                id="description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Describe the issue clearly, including how long it has persisted and any relevant details..."
+                rows={5}
+                required
+                disabled={loading}
+                className="w-full rounded-2xl border border-zinc-200 bg-white p-4 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-100 transition-all resize-none disabled:bg-zinc-50"
+              />
+            </div>
+          </div>
+
+          {/* Card 3: Photo Attachment */}
+          <div className="rounded-3xl border border-zinc-200/80 bg-white p-6 shadow-xs space-y-4">
+            <div className="flex items-center gap-2">
+              <UploadCloud size={18} className="text-zinc-600" />
+              <h2 className="text-sm font-bold text-zinc-900">
+                Photo Attachment (Optional)
+              </h2>
+            </div>
+
+            <FileUpload
+              selectedFile={attachment}
+              onFileSelect={(file) => setAttachment(file)}
+              allowedTypes={["image/jpeg", "image/png", "image/webp"]}
+              maxSizeMB={5}
+              disabled={loading}
+            />
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-2">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              disabled={loading}
+              className="rounded-2xl border border-zinc-200 bg-white px-6 py-3 text-xs sm:text-sm font-semibold text-zinc-700 hover:bg-zinc-50 active:scale-95 transition-all disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading || loadingUser || !currentUser?.room}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-zinc-900 px-6 py-3 text-xs sm:text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 active:scale-98 transition-all disabled:cursor-not-allowed disabled:opacity-50 hover:shadow-md"
+            >
+              {loading && <Loader2 size={16} className="animate-spin" />}
+              <span>{loading ? "Submitting Issue..." : "Submit Complaint"}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </AppShell>
+  );
 }

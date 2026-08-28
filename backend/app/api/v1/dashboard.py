@@ -176,6 +176,7 @@ def get_admin_dashboard(
 
     return AdminDashboard(
         total_complaints=stats["total"],
+        open_complaints=stats["open"],
         unassigned_complaints=stats["unassigned"],
         assigned_complaints=stats["assigned"],
         in_progress_complaints=stats["in_progress"],

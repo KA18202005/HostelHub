@@ -1,335 +1,290 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Bell } from "lucide-react";
+import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+  Clock,
+  FileSpreadsheet,
+  FileText,
+  RefreshCw,
+  Sparkles,
+  UserCheck,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
-import { logout } from "@/lib/auth";
+import Link from "next/link";
 import api from "@/lib/api";
+import { AppShell } from "@/components/layout/app-shell";
+import { StatCard } from "@/components/ui/stat-card";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { PriorityBadge } from "@/components/ui/priority-badge";
+import { StatGridSkeleton, CardListSkeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
+import { getDashboardRoute } from "@/src/hooks/useCurrentUser";
 
 type Complaint = {
-    id: string;
-    title: string;
-    priority: string;
-    status: string;
-    created_at?: string;
+  id: string;
+  title: string;
+  priority: string;
+  status: string;
+  created_at?: string;
 };
 
 type StaffDashboard = {
-    total_complaints: number;
-    unassigned_complaints: number;
-    assigned_complaints: number;
-    in_progress_complaints: number;
-    resolved_complaints: number;
-    closed_complaints: number;
-    recent_complaints: Complaint[];
+  total_complaints: number;
+  unassigned_complaints: number;
+  assigned_complaints: number;
+  in_progress_complaints: number;
+  resolved_complaints: number;
+  closed_complaints: number;
+  recent_complaints: Complaint[];
 };
 
-type Notification = {
-    id: string;
-    title: string;
-    message: string;
-    is_read: boolean;
-    user_id: string;
-    created_at: string;
+type UserProfile = {
+  name: string;
+  email: string;
+  role: string;
 };
 
 async function getStaffDashboard(): Promise<StaffDashboard> {
-    const response = await api.get(
-        "/api/v1/dashboard/staff"
-    );
-
-    return response.data;
+  const response = await api.get("/api/v1/dashboard/staff");
+  return response.data;
 }
 
 export default function StaffPage() {
-    const router = useRouter();
+  const router = useRouter();
+  const [user, setUser] = useState<UserProfile | null>(null);
 
-    useEffect(() => {
-        async function checkStaffAccess() {
-            try {
-                const response = await api.get(
-                    "/api/v1/auth/me"
-                );
+  useEffect(() => {
+    async function checkStaffAccess() {
+      try {
+        const response = await api.get("/api/v1/auth/me");
+        const role = response.data.role;
 
-                const role = response.data.role;
-
-                if (
-                    role !== "STAFF" &&
-                    role !== "ADMIN"
-                ) {
-                    router.replace("/dashboard");
-                }
-            } catch (error) {
-                console.error(
-                    "Authentication failed:",
-                    error
-                );
-
-                localStorage.removeItem("access_token");
-                router.replace("/login");
-            }
+        if (role !== "STAFF") {
+          router.replace(getDashboardRoute(role));
+          return;
         }
 
-        checkStaffAccess();
-    }, [router]);
-
-    const { data: unreadNotifications = [] } = useQuery({
-        queryKey: ["notifications", "unread"],
-        queryFn: async () => {
-            const response = await api.get(
-                "/api/v1/notifications/unread"
-            );
-
-            return response.data;
-        },
-        refetchInterval: 30000,
-    });
-
-    const unreadCount = unreadNotifications.length;
-
-    const {
-        data,
-        isLoading,
-        isError,
-    } = useQuery({
-        queryKey: ["staff-dashboard"],
-        queryFn: getStaffDashboard,
-    });
-
-    if (isLoading) {
-        return (
-            <main className="min-h-screen bg-zinc-50 p-8">
-                <div className="mx-auto max-w-6xl">
-                    <div className="animate-pulse">
-                        <div className="h-8 w-64 rounded bg-zinc-200" />
-
-                        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                            {[1, 2, 3, 4, 5, 6].map((item) => (
-                                <div
-                                    key={item}
-                                    className="h-28 rounded-xl bg-zinc-200"
-                                />
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            </main>
-        );
+        setUser(response.data);
+      } catch (error) {
+        console.error("Authentication failed:", error);
+        localStorage.removeItem("access_token");
+        router.replace("/login");
+      }
     }
 
-    if (isError) {
-        return (
-            <main className="flex min-h-screen items-center justify-center bg-zinc-50 px-6">
-                <div className="rounded-xl bg-white p-8 text-center shadow-sm">
-                    <h1 className="text-xl font-semibold text-zinc-900">
-                        Unable to load staff dashboard
-                    </h1>
+    checkStaffAccess();
+  }, [router]);
 
-                    <p className="mt-2 text-sm text-zinc-500">
-                        Please check that you are logged in as staff.
-                    </p>
-                </div>
-            </main>
-        );
-    }
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ["staff-dashboard"],
+    queryFn: getStaffDashboard,
+    refetchInterval: 30000,
+  });
 
-    if (!data) {
-        return null;
-    }
-
+  if (isLoading) {
     return (
-        <main className="min-h-screen bg-zinc-50">
-            <header className="border-b border-zinc-200 bg-white">
-                <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-                    <button
-                        type="button"
-                        onClick={() => router.push("/staff")}
-                        className="text-xl font-bold text-zinc-900"
-                    >
-                        HostelHub
-                    </button>
-
-                    <div className="flex items-center gap-4">
-                        <button
-                            type="button"
-                            onClick={() => router.push("/notifications")}
-                            className="relative rounded-lg p-2 text-zinc-600 transition hover:bg-zinc-100"
-                            aria-label="Notifications"
-                        >
-                            <Bell size={21} />
-
-                            {unreadCount > 0 && (
-                                <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                                    {unreadCount > 9
-                                        ? "9+"
-                                        : unreadCount}
-                                </span>
-                            )}
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => router.push("/announcements")}
-                            className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
-                        >
-                            Announcements
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={logout}
-                            className="rounded-lg border border-gray-200 bg-red-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-600"
-                        >
-                            Logout
-                        </button>
-
-                        <span className="text-sm font-medium text-zinc-500">
-                            Staff Dashboard
-                        </span>
-                    </div>
-                </div>
-            </header>
-
-            <div className="mx-auto max-w-6xl px-6 py-10">
-                <div>
-                    <h1 className="text-3xl font-bold text-zinc-900">
-                        Staff Dashboard
-                    </h1>
-
-                    <p className="mt-2 text-zinc-500">
-                        Monitor and manage hostel complaints.
-                    </p>
-                </div>
-
-                <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    <StatCard
-                        label="Total Complaints"
-                        value={data.total_complaints}
-                    />
-
-                    <StatCard
-                        label="Unassigned"
-                        value={data.unassigned_complaints}
-                    />
-
-                    <StatCard
-                        label="Assigned"
-                        value={data.assigned_complaints}
-                    />
-
-                    <StatCard
-                        label="In Progress"
-                        value={data.in_progress_complaints}
-                    />
-
-                    <StatCard
-                        label="Resolved"
-                        value={data.resolved_complaints}
-                    />
-
-                    <StatCard
-                        label="Closed"
-                        value={data.closed_complaints}
-                    />
-                </div>
-
-                <section className="mt-10 rounded-2xl border border-zinc-200 bg-white p-6">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h2 className="text-lg font-semibold text-zinc-900">
-                                Recent Complaints
-                            </h2>
-
-                            <p className="mt-1 text-sm text-zinc-500">
-                                Latest complaints requiring attention.
-                            </p>
-                        </div>
-
-                        <button
-                            type="button"
-                            onClick={() =>
-                                router.push("/staff/complaints")
-                            }
-                            className="text-sm font-medium text-blue-600 hover:underline"
-                        >
-                            View all
-                        </button>
-                    </div>
-
-                    <div className="mt-6 space-y-3">
-                        {data.recent_complaints.length === 0 ? (
-                            <p className="py-8 text-center text-sm text-zinc-500">
-                                No complaints found.
-                            </p>
-                        ) : (
-                            data.recent_complaints.map(
-                                (complaint) => (
-                                    <button
-                                        key={complaint.id}
-                                        type="button"
-                                        onClick={() =>
-                                            router.push(
-                                                `/staff/complaints/${complaint.id}`
-                                            )
-                                        }
-                                        className="w-full rounded-xl border border-zinc-200 p-4 text-left transition hover:border-zinc-300 hover:shadow-sm"
-                                    >
-                                        <div className="flex items-center justify-between gap-4">
-                                            <div className="min-w-0">
-                                                <p className="truncate font-medium text-zinc-900">
-                                                    {complaint.title}
-                                                </p>
-
-                                                <p className="mt-1 text-xs text-zinc-500">
-                                                    {complaint.created_at
-                                                        ? new Date(
-                                                            complaint.created_at
-                                                        ).toLocaleString()
-                                                        : ""}
-                                                </p>
-                                            </div>
-
-                                            <div className="flex shrink-0 gap-2">
-                                                <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-700">
-                                                    {complaint.priority}
-                                                </span>
-
-                                                <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700">
-                                                    {complaint.status.replaceAll(
-                                                        "_",
-                                                        " "
-                                                    )}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </button>
-                                )
-                            )
-                        )}
-                    </div>
-                </section>
-            </div>
-        </main>
-    );
-}
-
-function StatCard({
-    label,
-    value,
-}: {
-    label: string;
-    value: number;
-}) {
-    return (
-        <div className="rounded-xl border border-zinc-200 bg-white p-5">
-            <p className="text-sm text-zinc-500">
-                {label}
-            </p>
-
-            <p className="mt-2 text-3xl font-bold text-zinc-900">
-                {value}
-            </p>
+      <AppShell role="STAFF" maxWidth="wide">
+        <div className="space-y-8">
+          <div className="flex flex-col gap-2">
+            <div className="h-8 w-64 animate-pulse rounded-lg bg-zinc-200" />
+            <div className="h-4 w-96 animate-pulse rounded-lg bg-zinc-200" />
+          </div>
+          <StatGridSkeleton count={6} />
+          <CardListSkeleton count={4} />
         </div>
+      </AppShell>
     );
+  }
+
+  if (isError || !data) {
+    return (
+      <AppShell role="STAFF" maxWidth="wide">
+        <div className="mx-auto max-w-md py-12">
+          <div className="rounded-3xl border border-zinc-200/80 bg-white p-8 text-center shadow-xl shadow-zinc-200/30">
+            <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
+              <AlertCircle size={24} />
+            </div>
+            <h1 className="mt-4 text-lg font-bold text-zinc-900">
+              Unable to load staff dashboard
+            </h1>
+            <p className="mt-2 text-xs text-zinc-500">
+              Please verify your maintenance staff permissions and network status.
+            </p>
+            <button
+              onClick={() => refetch()}
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-zinc-900 px-5 py-2.5 text-xs font-semibold text-white hover:bg-zinc-800 transition-colors"
+            >
+              <RefreshCw size={14} />
+              <span>Retry</span>
+            </button>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
+
+  return (
+    <AppShell role="STAFF" maxWidth="wide" userName={user?.name}>
+      <div className="space-y-8">
+        {/* Welcome & Actions Header */}
+        <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center border-b border-zinc-200/60 pb-6">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                Staff Maintenance Center
+              </span>
+              {data.unassigned_complaints > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold text-amber-900 border border-amber-300/60 animate-pulse">
+                  <AlertTriangle size={11} />
+                  <span>{data.unassigned_complaints} unassigned</span>
+                </span>
+              )}
+            </div>
+
+            <h1 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900">
+              Maintenance Overview
+            </h1>
+
+            <p className="mt-1 text-xs sm:text-sm text-zinc-500">
+              Monitor real-time hostel maintenance requests, triage urgent tickets, and assign staff.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Link
+              href="/staff/complaints"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-zinc-900 px-5 py-3 text-xs sm:text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 active:scale-98 transition-all hover:shadow-md focus-visible:ring-2 focus-visible:ring-zinc-900 outline-none"
+            >
+              <FileText size={16} />
+              <span>Manage Complaints ({data.total_complaints})</span>
+            </Link>
+          </div>
+        </div>
+
+        {/* 6-Card Metrics Grid with Stagger */}
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <StatCard
+              label="Total Complaints"
+              value={data.total_complaints}
+              icon={<FileSpreadsheet size={19} />}
+              variant="default"
+              description="All reported hostel tickets"
+            />
+          </div>
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 delay-100">
+            <StatCard
+              label="Unassigned"
+              value={data.unassigned_complaints}
+              icon={<AlertTriangle size={19} />}
+              variant="amber"
+              description="Needs staff assignment"
+            />
+          </div>
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 delay-150">
+            <StatCard
+              label="Assigned"
+              value={data.assigned_complaints}
+              icon={<UserCheck size={19} />}
+              variant="purple"
+              description="Allocated to maintenance"
+            />
+          </div>
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 delay-200">
+            <StatCard
+              label="In Progress"
+              value={data.in_progress_complaints}
+              icon={<Clock size={19} />}
+              variant="blue"
+              description="Repairs currently underway"
+            />
+          </div>
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 delay-250">
+            <StatCard
+              label="Resolved"
+              value={data.resolved_complaints}
+              icon={<CheckCircle2 size={19} />}
+              variant="emerald"
+              description="Repairs finished"
+            />
+          </div>
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 delay-300">
+            <StatCard
+              label="Closed"
+              value={data.closed_complaints}
+              icon={<Sparkles size={19} />}
+              variant="default"
+              description="Archived and verified"
+            />
+          </div>
+        </section>
+
+        {/* Recent Complaints Section */}
+        <section className="rounded-3xl border border-zinc-200/80 bg-white shadow-xs overflow-hidden">
+          <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-5">
+            <div>
+              <h2 className="text-base font-bold text-zinc-900">
+                Recent Complaints Requiring Attention
+              </h2>
+              <p className="mt-0.5 text-xs text-zinc-500">
+                Latest reported problems submitted across all hostel blocks.
+              </p>
+            </div>
+
+            <Link
+              href="/staff/complaints"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-700 hover:text-zinc-950 transition-colors"
+            >
+              <span>View all</span>
+              <ArrowRight size={13} />
+            </Link>
+          </div>
+
+          {data.recent_complaints.length === 0 ? (
+            <div className="p-8">
+              <EmptyState
+                icon={<CheckCircle2 size={26} />}
+                title="All caught up!"
+                description="There are currently no active complaints requiring attention in the hostel queue."
+              />
+            </div>
+          ) : (
+            <div className="divide-y divide-zinc-100">
+              {data.recent_complaints.map((complaint) => (
+                <div
+                  key={complaint.id}
+                  onClick={() => router.push(`/staff/complaints/${complaint.id}`)}
+                  className="group flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between hover:bg-zinc-50/80 transition-all cursor-pointer"
+                >
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-bold text-sm text-zinc-900 group-hover:text-blue-600 transition-colors truncate">
+                      {complaint.title}
+                    </h3>
+                    <p className="mt-1 text-xs text-zinc-400">
+                      {complaint.created_at
+                        ? `Reported on ${new Date(complaint.created_at).toLocaleString()}`
+                        : "Recently created"}
+                    </p>
+                  </div>
+
+                  <div className="flex shrink-0 items-center gap-2.5">
+                    <PriorityBadge priority={complaint.priority} size="sm" />
+                    <StatusBadge status={complaint.status} size="sm" />
+                    <div className="hidden sm:flex size-7 items-center justify-center rounded-lg text-zinc-400 group-hover:text-zinc-900 group-hover:translate-x-0.5 transition-all">
+                      <ArrowRight size={15} />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </AppShell>
+  );
 }
