@@ -1,0 +1,10 @@
+# Root gitignore
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+Thumbs.db
+venv/
+node_modules/
+uploads/
